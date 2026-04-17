@@ -1,0 +1,10 @@
+<body name="projectile_ball" pos="100 100 100">
+    <freejoint name="projectile_ball_freejoint"/>
+    <geom name="projectile_ball_geom"
+          type="sphere"
+          size="0.15"
+          mass="15"
+          rgba="1 0 0 0.8"
+          contype="1"
+          conaffinity="1"/>
+</body>
