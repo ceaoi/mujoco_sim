@@ -1,6 +1,6 @@
-from mujoco_simulation.base import MujocoDeploy
-from mujoco_simulation.utils.gait_generator import GaitGenerator
-from mujoco_simulation.utils.deploy_func import quat_rotate_inverse
+from mujoco_sim.base import MujocoDeploy
+from mujoco_sim.utils.gait_generator import GaitGenerator
+from mujoco_sim.utils.deploy_func import quat_rotate_inverse
 import numpy as np
 
 class M20FlatDeploy(MujocoDeploy):

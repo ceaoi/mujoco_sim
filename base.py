@@ -47,13 +47,13 @@ class MujocoDeploy:
 
         # scales / constants
         self.default_angles = np.array(config["default_angles_leg"], dtype=np.float32)
+        self.action_scale_pos = np.float32(config["action_scale_pos"])
+        self.action_scale_vel = np.float32(config["action_scale_vel"])
 
             # self.ang_vel_scale = np.float32(config["ang_vel_scale"])
             # self.dof_pos_scale = np.float32(config["dof_pos_scale"])
             # self.dof_vel_leg_scale = np.float32(config["dof_vel_leg_scale"])
             # self.dof_vel_wheel_scale = np.float32(config["dof_vel_wheel_scale"])
-            # self.action_scale_pos = np.float32(config["action_scale_pos"])
-            # self.action_scale_vel = np.float32(config["action_scale_vel"])
         self.cmd_scale = np.array(config["cmd_scale"], dtype=np.float32)
         self.cmd_range = np.array(config["cmd_range"], dtype=np.float32)
         self.cmd_deadzone = np.array(config["cmd_deadzone"], dtype=np.float32)

@@ -1,4 +1,4 @@
-policy_path: "{mujoco_workspace_dir}/../logs/rsl_rl/m20_flat/exported/policy.onnx"
+policy_path: "{mujoco_workspace_dir}/../logs/rsl_rl/m20_flat/1_exported/policy.onnx"
 xml_path: "{mujoco_workspace_dir}/robots/M20_mjcf/mjcf/M20.xml"
 
 # Simulation time step
