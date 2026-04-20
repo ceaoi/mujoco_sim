@@ -125,7 +125,8 @@ class ProjectileManager:
 
         print(
             "[ProjectileManager] Spawn ball: "
-            f"pos={spawn_pos}, vel={linear_vel}, target={target_pos}"
+            # f"pos={spawn_pos}, vel={linear_vel}, target={target_pos}"
+            f"vel={np.linalg.norm(linear_vel):.2f}"
         )
 
     def spawn_ball_from_sector(

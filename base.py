@@ -79,10 +79,26 @@ class MujocoDeploy:
         self.robot.opt.timestep = config["simulation_dt"]
 
         # 加载 ONNX Policy
+        self.is_rnn = bool(config.get("is_rnn", False))
         self.policy = self._make_onnx_session(policy_path)
+        print(f"[deploy_mujoco] Loaded ONNX policy: {policy_path}")
+
+        self.policy_input_names = [x.name for x in self.policy.get_inputs()]
+        self.policy_output_names = [x.name for x in self.policy.get_outputs()]
+        print(f"[deploy_mujoco] policy inputs: {self.policy_input_names}")
+        print(f"[deploy_mujoco] policy outputs: {self.policy_output_names}")
         self.policy_input_name = self.policy.get_inputs()[0].name
         self.policy_output_name = self.policy.get_outputs()[0].name
-        print(f"[deploy_mujoco] Loaded ONNX policy: {policy_path}")
+
+        if self.is_rnn:
+            # 尽量从 onnx 的输入shape里读 hidden 尺寸
+            h_input = self.policy.get_inputs()[1]
+            h_shape = h_input.shape   # 一般是 [num_layers, 1, hidden_size]
+            self.rnn_num_layers = int(h_shape[0])
+            self.rnn_hidden_size = int(h_shape[2])
+            self.h_in = np.zeros((self.rnn_num_layers, 1, self.rnn_hidden_size), dtype=np.float32)
+            self.c_in = np.zeros((self.rnn_num_layers, 1, self.rnn_hidden_size), dtype=np.float32)
+
         # 遥控
         self.gamepad = Gamepad(joystick_index=0)
         self.gamepad.connect()
@@ -124,6 +140,10 @@ class MujocoDeploy:
         self.prev_a_pressed = False
         self.projectile_manager.reset()
 
+        if self.is_rnn:
+            self.h_in[:] = 0.0
+            self.c_in[:] = 0.0
+
     def run(self, duration = 1e3):
         self.reset()
         start = time.time()
@@ -161,7 +181,8 @@ class MujocoDeploy:
             self.update_obs()
             self.obs_hist[:-self.num_obs] = self.obs_hist[self.num_obs:]
             self.obs_hist[-self.num_obs:] = self.obs
-            self.update_action(self.obs_hist)
+            self.update_model_in()
+            self.update_action()
             # plotjuggler.send_array("obs", self.obs)
             # plotjuggler.send_array("action", self.action)
 
@@ -179,11 +200,31 @@ class MujocoDeploy:
 
     def update_obs(self):
         raise NotImplementedError("update_obs must be implemented by subclass")
+    
+    def update_model_in(self):
+        raise NotImplementedError("modelupdate_model_in must be implemented by subclass, let 'self.model_in = self.obs or self.obs_hist'")
 
-    def update_action(self, actor_in):
-        inp = np.ascontiguousarray(actor_in, dtype=np.float32)
-        out = self.policy.run([self.policy_output_name], {self.policy_input_name: inp})[0]
-        self.action = np.asarray(out, dtype=np.float32).squeeze()
+    def update_action(self):
+        model_in = self.model_in
+        inp = np.ascontiguousarray(model_in, dtype=np.float32)
+            # ONNX 一般要求 [batch, dim]
+        if inp.ndim == 1:
+            inp = inp[None, :]
+        if self.is_rnn:
+            action, h_out, c_out = self.policy.run(
+                [self.policy_output_name, "h_out", "c_out"],
+                {
+                    self.policy_input_name: inp,
+                    "h_in": self.h_in,
+                    "c_in": self.c_in,
+                }
+            )
+            self.action = np.asarray(action, dtype=np.float32).squeeze()
+            self.h_in = np.asarray(h_out, dtype=np.float32)
+            self.c_in = np.asarray(c_out, dtype=np.float32)
+        else:
+            action = self.policy.run([self.policy_output_name], {self.policy_input_name: inp})[0]
+            self.action = np.asarray(action, dtype=np.float32).squeeze()
 
         self.targ_dof_pos = (
             self.action[:self.num_actions_pos] * self.action_scale_pos + self.default_angles
@@ -253,39 +294,29 @@ class MujocoDeploy:
         self.prev_a_pressed = a_pressed
 
     def _build_merged_xml(self, robot_xml_path, ball_xml_path):
-        robot_xml_path = Path(robot_xml_path)
-        ball_xml_path = Path(ball_xml_path)
+        robot_xml_path = Path(robot_xml_path).resolve()
+        ball_xml_path = Path(ball_xml_path).resolve()
 
         if not robot_xml_path.exists():
             raise FileNotFoundError(f"robot xml not found: {robot_xml_path}")
         if not ball_xml_path.exists():
             raise FileNotFoundError(f"ball xml not found: {ball_xml_path}")
 
-        robot_text = robot_xml_path.read_text(encoding="utf-8")
-        ball_text = ball_xml_path.read_text(encoding="utf-8")
+        # 临时文件放在 ball.xml 所在目录
+        out_dir = robot_xml_path.parent
+        merged_xml_path = out_dir / f"tmp_merged.xml"
 
-        body_start = ball_text.find("<body")
-        body_end = ball_text.rfind("</body>")
-        if body_start == -1 or body_end == -1:
-            raise ValueError("[deploy_mujoco] ball.xml must contain a <body> ... </body> block.")
+        # include 路径建议写成“相对 merged_xml_path 的相对路径”
+        robot_rel = os.path.relpath(robot_xml_path, start=out_dir)
+        ball_rel = os.path.relpath(ball_xml_path, start=out_dir)
 
-        ball_body_block = ball_text[body_start:body_end + len("</body>")]
+        merged_text = f"""<mujoco model="merged_scene">
+            <include file="{robot_rel}"/>
+            <include file="{ball_rel}"/>
+        </mujoco>
+        """
 
-        worldbody_end = robot_text.rfind("</worldbody>")
-        if worldbody_end == -1:
-            raise ValueError("[deploy_mujoco] robot xml must contain </worldbody>.")
-
-        merged_text = (
-            robot_text[:worldbody_end]
-            + "\n    "
-            + ball_body_block
-            + "\n"
-            + robot_text[worldbody_end:]
-        )
-
-        # 关键：写到 robot xml 同目录，而不是 /tmp
-        merged_xml_path = robot_xml_path.parent / f"{robot_xml_path.stem}_with_ball.xml"
         merged_xml_path.write_text(merged_text, encoding="utf-8")
 
-        print(f"[deploy_mujoco] Merged xml created: {merged_xml_path}")
+        print(f"[deploy_mujoco] Temporary merged xml created: {merged_xml_path}")
         return str(merged_xml_path)

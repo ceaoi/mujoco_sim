@@ -9,6 +9,9 @@ class M20FlatDeploy(MujocoDeploy):
         super().__init__(yaml_filename, device)
         self.gait = GaitGenerator(f"{self.mujoco_workspace_dir}/configs/{yaml_filename}")
 
+    def update_model_in(self):
+        self.model_in = self.obs
+
     def update_obs(self):
         base_quat = self.data.qpos[3:7].copy()  # MuJoCo freejoint quat: [w, x, y, z]
         qj = self.data.qpos[7:][self.leg_joint_idx]  # 按照 joint_idx 重新排序

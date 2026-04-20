@@ -1,0 +1,5 @@
+<mujoco model="merged_scene">
+            <include file="M20.xml"/>
+            <include file="../../ball/ball.xml"/>
+        </mujoco>
+        
