@@ -36,8 +36,8 @@ class MujocoDeploy:
         self.control_decimation = config["control_decimation"]
         self.leg_joint_idx = config["leg_joint_idx"]
         self.wheel_joint_idx = config["wheel_joint_idx"]
-        self.leg_joint_idx_to_mujoco = config["leg_joint_idx_to_mujoco"]
-        self.wheel_joint_idx_to_mujoco = config["wheel_joint_idx_to_mujoco"]
+        self.leg_actions_to_mujoco = config["leg_actions_to_mujoco"]
+        self.wheel_actions_to_mujoco = config["wheel_actions_to_mujoco"]
 
         # gains
         self.kpsPos = np.array(config["kpsPos"], dtype=np.float32)
@@ -245,8 +245,10 @@ class MujocoDeploy:
             self.kpsVel,
             self.kdsVel,
         )
-        self.tau[self.leg_joint_idx_to_mujoco] = np.clip(tau_pos, -76.4, 76.4)
-        self.tau[self.wheel_joint_idx_to_mujoco] = np.clip(tau_vel, -21.6, 21.6)
+        self.tau[self.leg_actions_to_mujoco] = np.clip(tau_pos, -76.4, 76.4)
+        self.tau[self.wheel_actions_to_mujoco] = np.clip(tau_vel, -21.6, 21.6)
+        # self.tau[self.leg_actions_to_mujoco] = tau_pos
+        # self.tau[self.wheel_actions_to_mujoco] = tau_vel
 
     def _make_onnx_session(self, onnx_path: str) -> ort.InferenceSession:
         sess_opts = ort.SessionOptions()

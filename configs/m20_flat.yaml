@@ -9,23 +9,28 @@ control_decimation: 20 # 0.02 ms / 50Hz
 gait_freq: 2.0
 no_constraint_lin_acc_threshold: 4.0
 stop_hold_time_factor: 1.5
+switch_threshold: -0.1
 gait_offset_leftward: [0.5, 0.0, 0.0, 0.5]
 gait_offset_rightward: [0.0, 0.5, 0.5, 0.0]
 
-leg_joint_idx: [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14]
+leg_joint_idx: [0, 4, 8,  12,  # hipx
+                1, 5, 9,  13,  # hipy
+                2, 6, 10, 14]  # knee
 wheel_joint_idx: [3, 7, 11, 15]
-leg_joint_idx_to_mujoco: [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14]
-wheel_joint_idx_to_mujoco: [3, 7, 11, 15]
+leg_actions_to_mujoco: [0, 4, 8,  12,  # hipx
+                        1, 5, 9,  13,  # hipy
+                        2, 6, 10, 14]  # knee
+wheel_actions_to_mujoco: [3, 7, 11, 15]
 
 kpsPos: [80.0, 80.0, 80.0, 80.0, 80.0, 80.0, 80.0, 80.0, 80.0, 80.0, 80.0, 80.0]
 kdsPos: [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
 kpsVel: [0.0, 0.0, 0.0, 0.0]
 kdsVel: [0.6, 0.6, 0.6, 0.6]
 
-default_angles_leg: [-0.0,  -0.6,  1.0, # FL
-                      0.0,  -0.6,  1.0, # FR
-                     -0.0,   0.6, -1.0, # RL
-                      0.0,   0.6, -1.0] # RR
+                  # FL,   FR,    RL,   RR
+default_angles_leg: [0.0,  0.0,  0.0,  0.0,
+                    -0.6, -0.6,  0.6,  0.6,
+                     1.0,  1.0, -1.0, -1.0]
 
 # config["normaliazation"]["obs_scales"]
 cmd_scale: [0.5, 0.5, 1.0]

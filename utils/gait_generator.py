@@ -22,6 +22,7 @@ class GaitGenerator:
         self.gait_freq = float(cfg.get("gait_freq", 2.0))
         self.no_constraint_lin_acc_threshold = float(cfg.get("no_constraint_lin_acc_threshold", 4.0))
         self.stop_hold_time_factor = float(cfg.get("stop_hold_time_factor", 1.5))
+        self.switch_threshold = float(cfg["switch_threshold"])
 
         self.gait_offset_leftward = np.asarray(cfg.get("gait_offset_leftward", [0.0, 0.5, 0.5, 0.0]), dtype=np.float32)
         self.gait_offset_rightward = np.asarray(cfg.get("gait_offset_rightward", [0.5, 0.0, 0.0, 0.5]), dtype=np.float32)
@@ -67,7 +68,7 @@ class GaitGenerator:
         phase_per_leg = (float(self.gait_phase) + self.gait_offsets) * (1.0 if self.gait_phase >= 0.0 else 0.0)
         self.gait_clock = np.sin(2.0 * math.pi * phase_per_leg).astype(np.float32)
         if is_unstable:
-            self.gait_clock[:] = 0.0
+            self.gait_clock[:] = self.switch_threshold
 
         self.last_should_run_clock = should_run_clock
 
