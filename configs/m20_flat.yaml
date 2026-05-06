@@ -7,7 +7,7 @@ simulation_dt: 0.001
 control_decimation: 20 # 0.02 ms / 50Hz
 
 gait_freq: 2.0
-no_constraint_lin_acc_threshold: 4.0
+no_constraint_lin_acc_threshold: 2.0
 stop_hold_time_factor: 1.5
 switch_threshold: -0.1
 gait_offset_leftward: [0.5, 0.0, 0.0, 0.5]
@@ -39,7 +39,7 @@ action_scale_vel: 10.0
 
 num_actions: 16
 num_actions_pos: 12
-num_obs: 60
+num_obs: 55
 num_obs_hist: 10
 
 cmd_init: [0.0, 0.0, 0.0]

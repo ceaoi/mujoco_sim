@@ -63,8 +63,8 @@ class M20FlatDeploy(MujocoDeploy):
         self.obs[offset:offset + 3] = self.cmd
         offset += 3
 
-        gait_state = self.gait._update_gait(self.cmd, float(base_lin_acc_body[1]))
-        self.obs[offset:offset + 5] = gait_state
+        # gait_state = self.gait._update_gait(self.cmd, float(base_lin_acc_body[1]))
+        # self.obs[offset:offset + 5] = gait_state
 
 if __name__ == "__main__":
     deploy = M20FlatDeploy("m20_flat.yaml")
