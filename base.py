@@ -76,7 +76,9 @@ class MujocoDeploy:
         self.robot = mujoco.MjModel.from_xml_path(merged_xml_path)
         # self.robot = mujoco.MjModel.from_xml_path(xml_path)
         self.data = mujoco.MjData(self.robot)
-        self.robot.opt.timestep = config["simulation_dt"]
+        self.sim_dt = config["simulation_dt"]
+        self.robot.opt.timestep = self.sim_dt
+        self.ctrl_dt = self.sim_dt * self.control_decimation
 
         # 加载 ONNX Policy
         self.is_rnn = bool(config.get("is_rnn", False))
@@ -155,10 +157,10 @@ class MujocoDeploy:
                 next_tick += self.robot.opt.timestep
                 self.step()
 
-                # if self.counter % 10 == 0: # 每 10 步更新一次视觉
-                if self.follow_camera:
-                    self.set_camera_follow()
-                viewer.sync()
+                if self.counter % 10 == 0: # 每 10 步更新一次视觉
+                    if self.follow_camera:
+                        self.set_camera_follow()
+                    viewer.sync()
 
                 # Rudimentary time keeping, will drift relative to wall clock.
                 remain = next_tick - time.perf_counter()

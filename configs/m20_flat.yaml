@@ -2,9 +2,9 @@ policy_path: "{mujoco_workspace_dir}/../logs/rsl_rl/m20_flat/1_exported/policy.o
 xml_path: "{mujoco_workspace_dir}/robots/M20_mjcf/mjcf/M20.xml"
 
 # Simulation time step
-simulation_dt: 0.001
+simulation_dt: 0.0005
 # Controller update frequency (meets the requirement of simulation_dt * controll_decimation=0.02; 50Hz)
-control_decimation: 20 # 0.02 ms / 50Hz
+control_decimation: 40 # 0.02 ms / 50Hz
 
 gait_freq: 2.0
 no_constraint_lin_acc_threshold: 2.0
@@ -34,12 +34,13 @@ default_angles_leg: [0.0,  0.0,  0.0,  0.0,
 
 # config["normaliazation"]["obs_scales"]
 cmd_scale: [0.5, 0.5, 1.0]
-action_scale_pos: 0.25
-action_scale_vel: 10.0
+max_command_rate: [2.0, 2.0, 2.0]
+action_scale_pos: 0.5
+action_scale_vel: 20.0
 
 num_actions: 16
 num_actions_pos: 12
-num_obs: 55
+num_obs: 53
 num_obs_hist: 10
 
 cmd_init: [0.0, 0.0, 0.0]

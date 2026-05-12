@@ -2,26 +2,37 @@ from mujoco_sim.base import MujocoDeploy
 from mujoco_sim.utils.gait_generator import GaitGenerator
 from mujoco_sim.utils.deploy_func import quat_rotate_inverse
 import numpy as np
+from data_vis import PlotJugglerUDP
+pj = PlotJugglerUDP()
 
 class M20FlatDeploy(MujocoDeploy):
 
     def __init__(self, yaml_filename, device="cpu"):
         super().__init__(yaml_filename, device)
         self.gait = GaitGenerator(f"{self.mujoco_workspace_dir}/configs/{yaml_filename}")
+        self.max_delta_cmd = np.array(self.config["max_command_rate"], dtype=np.float32) * self.ctrl_dt
 
     def update_model_in(self):
         self.model_in = self.obs
+
+    def update_cmd(self):
+        cmd = np.asarray(self.gamepad.get_cmd(), dtype=np.float32) * self.cmd_range
+        self.cmd += np.clip(cmd - self.cmd, -self.max_delta_cmd, self.max_delta_cmd)
+        self.cmd[0] = 0.0 if abs(self.cmd[0]) < self.cmd_deadzone[0] else self.cmd[0]
+        self.cmd[1] = 0.0 if abs(self.cmd[1]) < self.cmd_deadzone[1] else self.cmd[1]
+        self.cmd[2] = 0.0 if abs(self.cmd[2]) < self.cmd_deadzone[2] else self.cmd[2]
 
     def update_obs(self):
         base_quat = self.data.qpos[3:7].copy()  # MuJoCo freejoint quat: [w, x, y, z]
         qj = self.data.qpos[7:][self.leg_joint_idx]  # 按照 joint_idx 重新排序
         dqj = self.data.qvel[6:]  # 按照 joint_idx 重新排序
         omega_world = self.data.qvel[3:6].copy()
-        base_lin_acc_world = self.data.qacc[0:3].copy()
+        # base_lin_acc_world = self.data.qacc[0:3].copy()
         # 训练端使用 body-frame 角速度：quat_rotate_inverse(base_quat, world_omega)
         omega_body = quat_rotate_inverse(base_quat, omega_world)
-        base_lin_acc_body = quat_rotate_inverse(base_quat, base_lin_acc_world)
-        imu_lin_acc_xy = base_lin_acc_body[:2]
+        # base_lin_acc_body = quat_rotate_inverse(
+        # base_quat, base_lin_acc_world)
+        # imu_lin_acc_xy = base_lin_acc_body[:2]
 
         # 训练端 projected_gravity = quat_rotate_inverse(base_quat, gravity_vec)
         gravity_world = np.array([0.0, 0.0, -1.0], dtype=np.float32)
@@ -37,8 +48,8 @@ class M20FlatDeploy(MujocoDeploy):
 
         offset = 0
         # encoder obs term 1: imu_lin_acc_xy (scaled)
-        self.obs[offset:offset + 2] = imu_lin_acc_xy * 0.04
-        offset += 2
+        # self.obs[offset:offset + 2] = imu_lin_acc_xy * 0.04
+        # offset += 2
 
         # encoder obs term 2: base_ang_vel (scaled)
         self.obs[offset:offset + 3] = omega_body * 0.5
@@ -62,6 +73,7 @@ class M20FlatDeploy(MujocoDeploy):
         # encoder obs term 7: velocity_commands (raw generated command)
         self.obs[offset:offset + 3] = self.cmd
         offset += 3
+        pj.send_array("cmd", self.cmd)
 
         # gait_state = self.gait._update_gait(self.cmd, float(base_lin_acc_body[1]))
         # self.obs[offset:offset + 5] = gait_state
