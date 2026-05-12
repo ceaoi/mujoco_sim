@@ -10,7 +10,7 @@ class M20FlatDeploy(MujocoDeploy):
     def __init__(self, yaml_filename, device="cpu"):
         super().__init__(yaml_filename, device)
         self.gait = GaitGenerator(f"{self.mujoco_workspace_dir}/configs/{yaml_filename}")
-        self.max_delta_cmd = np.array(self.config["max_command_rate"], dtype=np.float32) * self.ctrl_dt
+        self.max_delta_cmd = np.array(self.config["max_command_rate"], dtype=np.float32) * self.ctrl_dt # type: ignore
 
     def update_model_in(self):
         self.model_in = self.obs

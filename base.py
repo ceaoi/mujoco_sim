@@ -23,7 +23,7 @@ class MujocoDeploy:
 
     def __init__(self, yaml_filename, device="cpu"):
         with open(f"{self.mujoco_workspace_dir}/configs/{yaml_filename}", "r") as f:
-            config = yaml.load(f, Loader=yaml.FullLoader)
+            config: dict = yaml.load(f, Loader=yaml.FullLoader) # type: ignore
 
             policy_path = config["policy_path"].replace("{mujoco_workspace_dir}", self.mujoco_workspace_dir)
             xml_path = config["xml_path"].replace("{mujoco_workspace_dir}", self.mujoco_workspace_dir)
