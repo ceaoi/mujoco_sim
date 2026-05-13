@@ -26,10 +26,8 @@ class M20FlatDeploy(MujocoDeploy):
         base_quat = self.data.qpos[3:7].copy()  # MuJoCo freejoint quat: [w, x, y, z]
         qj = self.data.qpos[7:][self.leg_joint_idx]  # 按照 joint_idx 重新排序
         dqj = self.data.qvel[6:]  # 按照 joint_idx 重新排序
-        omega_world = self.data.qvel[3:6].copy()
+        omega = self.data.qvel[3:6].copy() # free joint 的线速度在 global frame，rotational velocity 在 local body frame
         # base_lin_acc_world = self.data.qacc[0:3].copy()
-        # 训练端使用 body-frame 角速度：quat_rotate_inverse(base_quat, world_omega)
-        omega_body = quat_rotate_inverse(base_quat, omega_world)
         # base_lin_acc_body = quat_rotate_inverse(
         # base_quat, base_lin_acc_world)
         # imu_lin_acc_xy = base_lin_acc_body[:2]
@@ -41,18 +39,13 @@ class M20FlatDeploy(MujocoDeploy):
         dqj_leg = dqj[self.leg_joint_idx]
         dqj_wheel = dqj[self.wheel_joint_idx]
 
-            # test observations
-            # plotjuggler.send_array("omega_world", omega_world)
-            # plotjuggler.send_array("omega_body", omega_body)
-            # plotjuggler.send_array("gravity_orientation", gravity_orientation)
-
         offset = 0
         # encoder obs term 1: imu_lin_acc_xy (scaled)
         # self.obs[offset:offset + 2] = imu_lin_acc_xy * 0.04
         # offset += 2
 
         # encoder obs term 2: base_ang_vel (scaled)
-        self.obs[offset:offset + 3] = omega_body * 0.5
+        self.obs[offset:offset + 3] = omega * 0.5
         offset += 3
 
         self.obs[offset:offset + 3] = gravity_orientation
@@ -74,6 +67,7 @@ class M20FlatDeploy(MujocoDeploy):
         self.obs[offset:offset + 3] = self.cmd
         offset += 3
         pj.send_array("cmd", self.cmd)
+        pj.send_array("obs", self.obs)
 
         # gait_state = self.gait._update_gait(self.cmd, float(base_lin_acc_body[1]))
         # self.obs[offset:offset + 5] = gait_state
