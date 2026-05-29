@@ -5,6 +5,8 @@ import numpy as np
 from data_vis import PlotJugglerUDP
 pj = PlotJugglerUDP()
 
+yaml_filename = "m20_flat.yaml"
+
 class M20FlatDeploy(MujocoDeployWl):
 
     def __init__(self, yaml_filename, device="cpu"):
@@ -73,5 +75,5 @@ class M20FlatDeploy(MujocoDeployWl):
         # self.obs[offset:offset + 5] = gait_state
 
 if __name__ == "__main__":
-    deploy = M20FlatDeploy("m20_flat.yaml")
+    deploy = M20FlatDeploy(yaml_filename)
     deploy.run()
