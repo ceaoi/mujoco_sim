@@ -2,7 +2,7 @@ import numpy as np
 import onnxruntime as ort
 
 from .base import MujocoDeploy
-from .utils.deploy_func import pd_ctrl
+from mujoco_sim.utils.deploy_func import pd_ctrl
 
 from data_vis import PlotJugglerUDP
 plotjuggler = PlotJugglerUDP("localhost", 5005)

@@ -4,7 +4,7 @@ import sys
 import numpy as np
 import yaml
 
-from mujoco_sim.base_wh import MujocoDeployWh
+from mujoco_sim.scripts.base.base_wh import MujocoDeployWh
 
 yaml_filename = "wh044x.yaml"
 

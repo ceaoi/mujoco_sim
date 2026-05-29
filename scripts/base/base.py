@@ -8,13 +8,13 @@ import yaml
 
 from pathlib import Path
 
-from .utils.gamepad_pygame import Gamepad
-from .utils.projectile import ProjectileManager
+from mujoco_sim.utils.gamepad_pygame import Gamepad
+from mujoco_sim.utils.projectile import ProjectileManager
 
 
 class MujocoDeploy:
 
-    mujoco_workspace_dir = os.path.dirname(__file__)
+    mujoco_workspace_dir = str(Path(__file__).resolve().parents[2])
 
     def __init__(self, yaml_filename, device="cpu"):
         with open(f"{self.mujoco_workspace_dir}/configs/{yaml_filename}", "r") as f:

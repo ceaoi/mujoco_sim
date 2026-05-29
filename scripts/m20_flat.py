@@ -1,4 +1,4 @@
-from mujoco_sim.base_wl import MujocoDeployWl
+from mujoco_sim.scripts.base.base_wl import MujocoDeployWl
 from mujoco_sim.utils.gait_generator import GaitGenerator
 from mujoco_sim.utils.deploy_func import quat_rotate_inverse
 import numpy as np
