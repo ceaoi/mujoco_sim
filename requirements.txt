@@ -1,0 +1,5 @@
+mujoco>=3.0.0
+numpy>=1.21.0
+pyyaml>=6.0
+onnxruntime>=1.14.0
+pygame>=2.0.0
