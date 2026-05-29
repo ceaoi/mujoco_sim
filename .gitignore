@@ -205,3 +205,5 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+tmp_merged.xml
+wh044x_fixed.urdf
