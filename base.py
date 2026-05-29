@@ -74,16 +74,16 @@ class MujocoDeploy:
     # ---- abstract (subclass must implement) ----
 
     def update_obs(self):
-        raise NotImplementedError
+        pass
 
     def update_model_in(self):
-        raise NotImplementedError
+        pass
 
     def update_action(self):
-        raise NotImplementedError
+        pass
 
     def update_tau(self):
-        raise NotImplementedError
+        pass
 
     # ---- common simulation loop ----
 

@@ -71,13 +71,6 @@ class Wh044xDeploy(MujocoDeployWh):
         self.viewer.cam.distance = float(np.linalg.norm(camera_offset))
         self.viewer.cam.azimuth = 90
         self.viewer.cam.elevation = -20
-    
-
-    def update_model_in(self):
-        self.model_in = self.obs
-
-    def update_obs(self):
-        self.obs[:] = 0.0
 
 
 if __name__ == "__main__":
