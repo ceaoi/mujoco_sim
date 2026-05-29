@@ -217,7 +217,7 @@ class Gamepad:
     def get_cmd(self):
         """
         Returns normalized [vx_cmd, vy_cmd, yaw_cmd].
-        MujocoDeploy can multiply this by cmd_range.
+        MujocoDeployWl can multiply this by cmd_range.
         """
         return [
             self.get_axis("leftJS_y"),

@@ -17,7 +17,7 @@ from .utils.projectile import ProjectileManager
 from data_vis import PlotJugglerUDP
 plotjuggler = PlotJugglerUDP("localhost", 5005)
 
-class MujocoDeploy:
+class MujocoDeployWl:
 
     mujoco_workspace_dir = os.path.dirname(__file__)
 

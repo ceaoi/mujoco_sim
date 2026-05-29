@@ -1,11 +1,11 @@
-from mujoco_sim.base import MujocoDeploy
+from mujoco_sim.base_wl import MujocoDeployWl
 from mujoco_sim.utils.gait_generator import GaitGenerator
 from mujoco_sim.utils.deploy_func import quat_rotate_inverse
 import numpy as np
 from data_vis import PlotJugglerUDP
 pj = PlotJugglerUDP()
 
-class M20FlatDeploy(MujocoDeploy):
+class M20FlatDeploy(MujocoDeployWl):
 
     def __init__(self, yaml_filename, device="cpu"):
         super().__init__(yaml_filename, device)
