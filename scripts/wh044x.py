@@ -20,8 +20,9 @@ class Wh044xDeploy(MujocoDeployWh):
         if self.viewer is None:
             return
         base_pos = self.data.qpos[0:3].copy()
-        camera_offset = np.array([-2.0, 1.0, 4.0], dtype=np.float32)
+        camera_offset = np.array([-0.5, 0.5, 3.0], dtype=np.float32)
         self.viewer.cam.lookat[:] = base_pos
+        self.viewer.cam.lookat[2] += 0.5
         self.viewer.cam.distance = float(np.linalg.norm(camera_offset))
         self.viewer.cam.azimuth = 90
         self.viewer.cam.elevation = -20
