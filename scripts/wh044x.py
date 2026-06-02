@@ -26,7 +26,7 @@ _build_dir = _load_chassis_build_dir(yaml_filename)
 if _build_dir not in sys.path:
     sys.path.insert(0, _build_dir)
 
-import chassis as cpp_chassis
+import chassis as cpp_chassis # type: ignore
 
 
 class Wh044xDeploy(MujocoDeployWh):
