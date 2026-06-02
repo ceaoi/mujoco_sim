@@ -40,17 +40,18 @@ class Wh044xDeploy(MujocoDeployWh):
         self.wheel_radius = 0.065  # m, from MJCF
 
         self.chassis = cpp_chassis.Chassis()
-        # MuJoCo joint order: LF, LR, RF, RR
-        self.chassis.set_center2wheel(
-            [0.28, -0.28, 0.28, -0.28],
-            [0.23, 0.23, -0.23, -0.23],
-        )
+        self.chassis.set_rate_limit(dt = self.ctrl_dt, vel_rate = 1.0e0, steering_rate = 10.0e0)
+        self.prev_r1_pressed = False
 
     def update_action(self):
+        if (self.gamepad.get_button("R1") & (not self.prev_r1_pressed)):
+            self.chassis.mode = (self.chassis.mode + 1) % 3
+            print(f"Switched to mode {self.chassis.mode}")
+        self.prev_r1_pressed = self.gamepad.get_button("R1")
         vx = float(self.cmd[0])
-        vy = float(self.cmd[1])
+        vy = float(self.cmd[1])        
         omega = float(self.cmd[2])
-        self.chassis.update(vx, vy, omega)
+        self.chassis.step(vx, vy, omega)
         self.action[self.turn_joint_idx] = np.array(self.chassis.steering_angle)
         self.action[self.wheel_joint_idx] = np.array(self.chassis.vel) / self.wheel_radius
 
