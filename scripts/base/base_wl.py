@@ -91,20 +91,18 @@ class MujocoDeployWl(MujocoDeploy):
         self.targ_dof_vel = self.targ_dof_vel * (np.abs(self.targ_dof_vel) >= self.wheel_action_vel_deadzone)
 
     def update_tau(self):
-        tau_pos = pd_ctrl(
+        self.tau[self.leg_actions_to_mujoco] = pd_ctrl(
             self.targ_dof_pos - self.data.qpos[7:][self.leg_joint_idx],
             -self.data.qvel[6:][self.leg_joint_idx],
             self.kpsPos,
             self.kdsPos,
         )
-        tau_vel = pd_ctrl(
+        self.tau[self.wheel_actions_to_mujoco] = pd_ctrl(
             np.zeros(len(self.wheel_joint_idx), dtype=np.float32),
             self.targ_dof_vel - self.data.qvel[6:][self.wheel_joint_idx],
             self.kpsVel,
             self.kdsVel,
         )
-        self.tau[self.leg_actions_to_mujoco] = np.clip(tau_pos, -76.4, 76.4)
-        self.tau[self.wheel_actions_to_mujoco] = np.clip(tau_vel, -21.6, 21.6)
 
     def _make_onnx_session(self, onnx_path: str) -> ort.InferenceSession:
         sess_opts = ort.SessionOptions()

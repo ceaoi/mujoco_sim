@@ -3,10 +3,10 @@
 """
 Convert a URDF file to MuJoCo MJCF XML.
 
-Version: mesh-path-fix-keep-visual-2026-06-17
+Version: mesh-path-fix-keep-visual-auto-motor-required-base-wrap-freejoint-default-classes-expanded-attrs-light-floor-v3-compatible-2026-06-17
 
 Usage:
-    python urdf2xml.py --path=/path/to/robot.urdf
+    python urdf2xml.py --path=/path/to/robot.urdf --base=base_link
 
 Default output:
     /path/to/robot.xml
@@ -23,6 +23,14 @@ Path handling policy:
       the URDF is copied into /tmp.
     - By default, MuJoCo URDF visual meshes are preserved by injecting
       <mujoco><compiler discardvisual="false"/></mujoco> into the temporary URDF.
+    - The --base argument is required. The generated MJCF body named by --base gets
+      a <freejoint/>. If that body is absent after MuJoCo URDF compilation, the script wraps direct <worldbody> children into a new body with this name.
+    - After MJCF export, a robot default-class tree is added:
+          robot / motor / visual / collision.
+    - Visual mesh geoms are assigned class="visual". Collision geoms are assigned
+      class="collision". The class defaults carry the MuJoCo contact, friction,
+      density, group, and material settings.
+    - The generated MJCF gets a checker floor material, a non-shadow-casting directional light, and a plane floor in group=0.
 """
 
 from __future__ import annotations
@@ -35,6 +43,7 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
+import xml.etree.ElementTree as ET
 
 
 MESH_EXTENSIONS = {".stl", ".dae", ".obj", ".ply", ".mesh"}
@@ -317,6 +326,614 @@ def rewrite_mesh_filenames(
     return temp_urdf
 
 
+
+def format_mjcf_number(value: float) -> str:
+    """Format a number for compact MJCF attributes."""
+    if float(value).is_integer():
+        return str(int(value))
+    return f"{value:.12g}"
+
+
+def _local_tag(tag: str) -> str:
+    """Return local XML tag name, ignoring a namespace if one exists."""
+    return tag.rsplit("}", 1)[-1] if "}" in tag else tag
+
+
+def _insert_top_level_section(root: ET.Element, section: ET.Element) -> None:
+    """Insert a top-level MJCF section in a readable location."""
+    # For MuJoCo files, actuator is conventionally after worldbody/contact/equality/tendon.
+    preferred_before = {"sensor", "keyframe"}
+    for idx, child in enumerate(list(root)):
+        if _local_tag(child.tag) in preferred_before:
+            root.insert(idx, section)
+            return
+    root.append(section)
+
+
+def _find_or_create_top_level_section(root: ET.Element, section_name: str, insert_before: Optional[set[str]] = None) -> ET.Element:
+    """Find or create a top-level MJCF section."""
+    for child in root:
+        if _local_tag(child.tag) == section_name:
+            return child
+
+    section = ET.Element(section_name)
+    if insert_before:
+        for idx, child in enumerate(list(root)):
+            if _local_tag(child.tag) in insert_before:
+                root.insert(idx, section)
+                return section
+    root.append(section)
+    return section
+
+
+def _find_direct_child_by_name(parent: ET.Element, tag_name: str, name: str) -> Optional[ET.Element]:
+    """Find a direct child by local tag and exact name attribute."""
+    for child in list(parent):
+        if _local_tag(child.tag) == tag_name and child.attrib.get("name") == name:
+            return child
+    return None
+
+
+def ensure_light_and_floor_in_mjcf(xml_path: Path) -> Tuple[bool, bool, bool, bool]:
+    """
+    Add or update the default checker floor assets, directional light, and floor plane.
+
+    Returns:
+        (texture_created, material_created, light_created, floor_created)
+    """
+    xml_path = xml_path.expanduser().resolve()
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    if _local_tag(root.tag) != "mujoco":
+        raise ValueError(f"Expected MJCF root <mujoco>, got <{root.tag}>")
+
+    # Keep assets before worldbody in a conventional MJCF order.
+    asset = _find_or_create_top_level_section(root, "asset", insert_before={"worldbody", "contact", "actuator", "sensor", "keyframe"})
+
+    texture = _find_direct_child_by_name(asset, "texture", "texplane")
+    texture_created = texture is None
+    if texture is None:
+        texture = ET.Element("texture")
+        asset.append(texture)
+    texture.attrib.clear()
+    texture.attrib.update(
+        {
+            "name": "texplane",
+            "type": "2d",
+            "builtin": "checker",
+            "rgb1": ".2 .3 .4",
+            "rgb2": ".1 0.15 0.2",
+            "width": "512",
+            "height": "512",
+        }
+    )
+
+    material = _find_direct_child_by_name(asset, "material", "MatPlane")
+    material_created = material is None
+    if material is None:
+        material = ET.Element("material")
+        asset.append(material)
+    material.attrib.clear()
+    material.attrib.update(
+        {
+            "name": "MatPlane",
+            "reflectance": "0.3",
+            "texture": "texplane",
+            "texrepeat": "1 1",
+            "texuniform": "true",
+        }
+    )
+
+    worldbody = _find_worldbody(root)
+
+    light = _find_direct_child_by_name(worldbody, "light", "main_light")
+    light_created = light is None
+    if light is None:
+        light = ET.Element("light")
+        # Put light at the beginning of worldbody, before floor and robot body.
+        worldbody.insert(0, light)
+    light.attrib.clear()
+    light.attrib.update(
+        {
+            "name": "main_light",
+            "directional": "true",
+            "pos": "-0.5 0.5 3",
+            "dir": "0 0 -1",
+            "castshadow": "false",
+        }
+    )
+
+    floor = _find_direct_child_by_name(worldbody, "geom", "floor")
+    floor_created = floor is None
+    if floor is None:
+        floor = ET.Element("geom")
+        # Put floor right after the light when possible.
+        insert_idx = 1 if len(list(worldbody)) >= 1 else 0
+        worldbody.insert(insert_idx, floor)
+    floor.attrib.clear()
+    floor.attrib.update(
+        {
+            "name": "floor",
+            "pos": "0 0 0",
+            "size": "100 100 .125",
+            "type": "plane",
+            "material": "MatPlane",
+            "condim": "3",
+            "friction": "1 0.01 0.01",
+            "group": "0",
+        }
+    )
+
+    ET.indent(tree, space="  ")
+    tree.write(xml_path, encoding="utf-8", xml_declaration=True)
+    return texture_created, material_created, light_created, floor_created
+
+
+
+def _find_or_create_direct_default(parent: ET.Element, class_name: Optional[str] = None) -> ET.Element:
+    """Find or create a direct <default> child, optionally by class name."""
+    for child in list(parent):
+        if _local_tag(child.tag) != "default":
+            continue
+        if class_name is None and "class" not in child.attrib:
+            return child
+        if class_name is not None and child.attrib.get("class") == class_name:
+            return child
+
+    attrib = {} if class_name is None else {"class": class_name}
+    created = ET.Element("default", attrib)
+    parent.append(created)
+    return created
+
+
+def _find_or_create_direct_child(parent: ET.Element, tag_name: str) -> ET.Element:
+    """Find or create a direct child with the given local tag name."""
+    for child in list(parent):
+        if _local_tag(child.tag) == tag_name:
+            return child
+    child = ET.Element(tag_name)
+    parent.append(child)
+    return child
+
+
+def ensure_robot_default_classes_in_mjcf(xml_path: Path) -> None:
+    """
+    Ensure the generated MJCF has a compact default class hierarchy:
+
+        default / robot / motor / visual / collision
+
+    The values intentionally follow the user-provided template. Visual and collision
+    geoms later only need class="visual" or class="collision".
+    """
+    xml_path = xml_path.expanduser().resolve()
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    if _local_tag(root.tag) != "mujoco":
+        raise ValueError(f"Expected MJCF root <mujoco>, got <{root.tag}>")
+
+    # Put <default> before <asset>/<worldbody> when we create it.
+    top_default = None
+    for child in list(root):
+        if _local_tag(child.tag) == "default" and "class" not in child.attrib:
+            top_default = child
+            break
+    if top_default is None:
+        top_default = ET.Element("default")
+        insert_idx = 0
+        for idx, child in enumerate(list(root)):
+            if _local_tag(child.tag) in {"compiler", "option", "size", "statistic"}:
+                insert_idx = idx + 1
+        root.insert(insert_idx, top_default)
+
+    robot_default = _find_or_create_direct_default(top_default, "robot")
+    motor_default = _find_or_create_direct_default(robot_default, "motor")
+    visual_default = _find_or_create_direct_default(robot_default, "visual")
+    collision_default = _find_or_create_direct_default(robot_default, "collision")
+
+    # Keep the child elements but make their attributes exactly match the desired defaults.
+    motor_joint = _find_or_create_direct_child(motor_default, "joint")
+    motor_joint.attrib.clear()
+    motor_motor = _find_or_create_direct_child(motor_default, "motor")
+    motor_motor.attrib.clear()
+
+    visual_geom = _find_or_create_direct_child(visual_default, "geom")
+    visual_geom.attrib.clear()
+    visual_geom.attrib.update(
+        {
+            "material": "default_material",
+            "contype": "0",
+            "conaffinity": "0",
+            "group": "2",
+        }
+    )
+
+    collision_geom = _find_or_create_direct_child(collision_default, "geom")
+    collision_geom.attrib.clear()
+    collision_geom.attrib.update(
+        {
+            "material": "collision_material",
+            "condim": "3",
+            "contype": "1",
+            "conaffinity": "1",
+            "solref": "0.005 1",
+            "friction": "1 0.01 0.001",
+            "density": "0",
+            "group": "1",
+        }
+    )
+
+    # Material definitions used by the default classes. Plane material is handled by
+    # ensure_light_and_floor_in_mjcf().
+    asset = _find_or_create_top_level_section(root, "asset", insert_before={"worldbody", "contact", "actuator", "sensor", "keyframe"})
+
+    default_material = _find_direct_child_by_name(asset, "material", "default_material")
+    if default_material is None:
+        default_material = ET.Element("material")
+        asset.insert(0, default_material)
+    default_material.attrib.clear()
+    default_material.attrib.update(
+        {
+            "name": "default_material",
+            "rgba": "0.7 0.7 0.7 1",
+        }
+    )
+
+    collision_material = _find_direct_child_by_name(asset, "material", "collision_material")
+    if collision_material is None:
+        collision_material = ET.Element("material")
+        asset.insert(1 if len(list(asset)) >= 1 else 0, collision_material)
+    collision_material.attrib.clear()
+    collision_material.attrib.update(
+        {
+            "name": "collision_material",
+            "rgba": "0.0 0.4 0.8 0.2",
+        }
+    )
+
+    ET.indent(tree, space="  ")
+    tree.write(xml_path, encoding="utf-8", xml_declaration=True)
+
+
+
+def _find_body_by_name(root: ET.Element, body_name: str) -> Optional[ET.Element]:
+    """Find an MJCF <body> by exact name."""
+    for body in root.iter():
+        if _local_tag(body.tag) == "body" and body.attrib.get("name") == body_name:
+            return body
+    return None
+
+
+def _collect_body_names(root: ET.Element, limit: int = 80) -> List[str]:
+    """Collect body names for readable error messages."""
+    names: List[str] = []
+    for body in root.iter():
+        if _local_tag(body.tag) != "body":
+            continue
+        name = body.attrib.get("name")
+        if name:
+            names.append(name)
+    return names[:limit]
+
+
+def body_has_direct_freejoint_or_free_joint(body: ET.Element) -> bool:
+    """Check whether this body already has a direct freejoint/free joint child."""
+    for child in list(body):
+        tag = _local_tag(child.tag)
+        if tag == "freejoint":
+            return True
+        if tag == "joint" and child.attrib.get("type", "hinge").lower() == "free":
+            return True
+    return False
+
+
+def body_has_direct_non_free_joint(body: ET.Element) -> bool:
+    """Check whether this body already has a direct non-free joint child."""
+    for child in list(body):
+        if _local_tag(child.tag) != "joint":
+            continue
+        if child.attrib.get("type", "hinge").lower() != "free":
+            return True
+    return False
+
+
+def _find_worldbody(root: ET.Element) -> ET.Element:
+    """Return the top-level <worldbody> section from an MJCF XML tree."""
+    for child in root:
+        if _local_tag(child.tag) == "worldbody":
+            return child
+    raise RuntimeError("MJCF XML has no top-level <worldbody> section.")
+
+
+def _xml_has_any_freejoint(root: ET.Element) -> bool:
+    """Check whether the MJCF already contains a free joint anywhere."""
+    for elem in root.iter():
+        tag = _local_tag(elem.tag)
+        if tag == "freejoint":
+            return True
+        if tag == "joint" and elem.attrib.get("type", "hinge").lower() == "free":
+            return True
+    return False
+
+
+def _wrap_worldbody_children_as_base(worldbody: ET.Element, base_body_name: str) -> ET.Element:
+    """Wrap all existing direct <worldbody> children into a new base body."""
+    old_children = list(worldbody)
+    if not old_children:
+        raise RuntimeError("Cannot create floating base: <worldbody> is empty.")
+
+    base_body = ET.Element("body", {"name": base_body_name})
+    for child in old_children:
+        worldbody.remove(child)
+        base_body.append(child)
+    worldbody.append(base_body)
+    return base_body
+
+
+def add_freejoint_to_base_body(xml_path: Path, base_body_name: str) -> bool:
+    """
+    Add <freejoint/> using the user-specified --base name.
+
+    Simple policy:
+      - If <body name=--base> exists, insert <freejoint/> into that body.
+      - If it does not exist, create <body name=--base> under <worldbody>, move all
+        existing direct worldbody children into it, then insert <freejoint/>.
+
+    The second case is needed because MuJoCo's URDF compiler often flattens the
+    URDF root link, so a URDF link named base_link may become geoms directly under
+    <worldbody> instead of an MJCF <body name="base_link">.
+    """
+    xml_path = xml_path.expanduser().resolve()
+    if not base_body_name or not base_body_name.strip():
+        raise ValueError("--base must be a non-empty base body name, e.g. --base=base_link")
+    base_body_name = base_body_name.strip()
+
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    if _local_tag(root.tag) != "mujoco":
+        raise ValueError(f"Expected MJCF root <mujoco>, got <{root.tag}>")
+
+    if _xml_has_any_freejoint(root):
+        print("[INFO] XML already contains a freejoint/free joint. Skip adding another one.")
+        return False
+
+    worldbody = _find_worldbody(root)
+    target_body = _find_body_by_name(root, base_body_name)
+
+    if target_body is None:
+        available_names = _collect_body_names(root, limit=20)
+        print(
+            f"[WARN] MJCF body name='{base_body_name}' was not found. "
+            "This is common when the URDF root link is flattened into <worldbody>."
+        )
+        if available_names:
+            print("[INFO] Existing body names before wrapping include:")
+            for name in available_names:
+                print(f"       - {name}")
+        target_body = _wrap_worldbody_children_as_base(worldbody, base_body_name)
+        print(f"[OK] Wrapped direct <worldbody> children into <body name='{base_body_name}'>.")
+
+    if body_has_direct_freejoint_or_free_joint(target_body):
+        print(f"[INFO] Body '{base_body_name}' already has a freejoint/free joint. Skip adding another one.")
+        return False
+
+    if body_has_direct_non_free_joint(target_body):
+        raise RuntimeError(
+            f"Body '{base_body_name}' already has a direct non-free <joint>. "
+            "A floating base body should not also have a hinge/slide joint as its direct joint. "
+            "Please choose a root/base body instead."
+        )
+
+    freejoint_name = f"{base_body_name}_freejoint"
+    target_body.insert(0, ET.Element("freejoint", {"name": freejoint_name}))
+
+    ET.indent(tree, space="  ")
+    tree.write(xml_path, encoding="utf-8", xml_declaration=True)
+
+    print(f"[OK] Added <freejoint name='{freejoint_name}'/> to body '{base_body_name}'.")
+    print("[WARN] Floating-base qpos layout: qpos[0:3]=base_pos, qpos[3:7]=base_quat, qpos[7:]=joint_pos.")
+    print("[WARN] Floating-base qvel layout: qvel[0:3]=base_lin_vel, qvel[3:6]=base_ang_vel, qvel[6:]=joint_vel.")
+    return True
+
+
+def _int_attr_is_zero(elem: ET.Element, attr_name: str) -> bool:
+    """Return True if an integer-like MJCF attribute exists and is zero."""
+    raw = elem.attrib.get(attr_name)
+    if raw is None:
+        return False
+    try:
+        return int(float(raw.strip())) == 0
+    except ValueError:
+        return False
+
+
+def _geom_has_mesh(elem: ET.Element) -> bool:
+    """Return True for MJCF geoms that use a mesh asset."""
+    geom_type = elem.attrib.get("type", "").lower()
+    return geom_type == "mesh" or "mesh" in elem.attrib
+
+
+def _geom_looks_visual(elem: ET.Element) -> bool:
+    """
+    Detect a visual-only geom after MuJoCo URDF compilation.
+
+    With <compiler discardvisual="false"/>, MuJoCo normally keeps URDF visual meshes
+    as geoms with contact disabled, i.e. contype="0" and conaffinity="0".
+    Some files also preserve names/classes containing "visual". Collision geoms may
+    also use mesh assets, so mesh type alone is not enough to identify visuals.
+    """
+    if _int_attr_is_zero(elem, "contype") and _int_attr_is_zero(elem, "conaffinity"):
+        return True
+
+    text_fields = [
+        elem.attrib.get("name", ""),
+        elem.attrib.get("class", ""),
+        elem.attrib.get("childclass", ""),
+    ]
+    return any("visual" in item.lower() for item in text_fields)
+
+
+def assign_geom_classes_to_mjcf(xml_path: Path) -> Tuple[int, int]:
+    """
+    Assign visual/collision parameters to generated MJCF geoms.
+
+    Important compatibility note:
+        Some MuJoCo loading/merging paths reject per-element class="visual" on
+        <geom>, even though default classes are useful as a readable parameter
+        template. To keep the generated XML robust in this project, this function
+        writes the effective visual/collision attributes directly onto each geom
+        and removes any per-geom class attribute.
+
+    Policy:
+      - Visual-only mesh geoms -> material="default_material", contype=0,
+        conaffinity=0, group=2.
+      - Collision/contact geoms -> material="collision_material", condim=3,
+        contype=1, conaffinity=1, solref="0.005 1",
+        friction="1 0.01 0.001", density=0, group=1.
+    """
+    xml_path = xml_path.expanduser().resolve()
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    if _local_tag(root.tag) != "mujoco":
+        raise ValueError(f"Expected MJCF root <mujoco>, got <{root.tag}>")
+
+    visual_count = 0
+    collision_count = 0
+
+    common_clear_attrs = (
+        "class",
+        "group",
+        "contype",
+        "conaffinity",
+        "rgba",
+        "material",
+        "condim",
+        "friction",
+        "solref",
+        "density",
+    )
+
+    for elem in root.iter():
+        if _local_tag(elem.tag) != "geom":
+            continue
+
+        # Preserve environment geoms if the script is re-run on an XML that already has them.
+        if elem.attrib.get("name") == "floor":
+            continue
+
+        is_visual = _geom_has_mesh(elem) and _geom_looks_visual(elem)
+
+        for attr in common_clear_attrs:
+            elem.attrib.pop(attr, None)
+
+        if is_visual:
+            elem.attrib.update(
+                {
+                    "material": "default_material",
+                    "contype": "0",
+                    "conaffinity": "0",
+                    "group": "2",
+                }
+            )
+            visual_count += 1
+        else:
+            elem.attrib.update(
+                {
+                    "material": "collision_material",
+                    "condim": "3",
+                    "contype": "1",
+                    "conaffinity": "1",
+                    "solref": "0.005 1",
+                    "friction": "1 0.01 0.001",
+                    "density": "0",
+                    "group": "1",
+                }
+            )
+            collision_count += 1
+
+    ET.indent(tree, space="  ")
+    tree.write(xml_path, encoding="utf-8", xml_declaration=True)
+    return visual_count, collision_count
+
+def add_motor_actuators_to_mjcf(
+    xml_path: Path,
+    force_limit: float = 99.0,
+    skip_existing_actuated_joints: bool = True,
+) -> int:
+    """
+    Add <motor> actuators for all scalar movable joints in a MuJoCo MJCF XML.
+
+    Notes:
+        - MJCF fixed joints do not appear as <joint> elements, so every hinge/slide joint
+          found here is movable.
+        - free and ball joints are skipped because a scalar <motor joint="..."/> is not
+          appropriate for them.
+        - ctrlrange and forcerange are both set to [-force_limit, force_limit].
+    """
+    xml_path = xml_path.expanduser().resolve()
+    if force_limit <= 0:
+        raise ValueError("motor force limit must be positive")
+
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    if _local_tag(root.tag) != "mujoco":
+        raise ValueError(f"Expected MJCF root <mujoco>, got <{root.tag}>")
+
+    actuator = None
+    for child in root:
+        if _local_tag(child.tag) == "actuator":
+            actuator = child
+            break
+    if actuator is None:
+        actuator = ET.Element("actuator")
+        _insert_top_level_section(root, actuator)
+
+    already_actuated_joints = set()
+    for act in actuator:
+        joint_name = act.attrib.get("joint")
+        if joint_name:
+            already_actuated_joints.add(joint_name)
+
+    scalar_joint_names: List[str] = []
+    seen = set()
+    for joint in root.iter():
+        if _local_tag(joint.tag) != "joint":
+            continue
+        name = joint.attrib.get("name")
+        if not name or name in seen:
+            continue
+        seen.add(name)
+
+        joint_type = joint.attrib.get("type", "hinge").lower()
+        if joint_type in {"free", "ball"}:
+            continue
+        scalar_joint_names.append(name)
+
+    added = 0
+    limit_text = format_mjcf_number(abs(force_limit))
+    range_text = f"-{limit_text} {limit_text}"
+
+    for joint_name in scalar_joint_names:
+        if skip_existing_actuated_joints and joint_name in already_actuated_joints:
+            continue
+        motor_name = f"{joint_name}_motor"
+        ET.SubElement(
+            actuator,
+            "motor",
+            {
+                "name": motor_name,
+                "joint": joint_name,
+                "ctrlrange": range_text,
+                "ctrllimited": "true",
+                "forcerange": range_text,
+                "forcelimited": "true",
+            },
+        )
+        added += 1
+
+    ET.indent(tree, space="  ")
+    tree.write(xml_path, encoding="utf-8", xml_declaration=True)
+    return added
+
 def convert_urdf_to_mjcf(
     urdf_path: Path,
     output_path: Path,
@@ -327,6 +944,9 @@ def convert_urdf_to_mjcf(
     overwrite: bool,
     allow_missing_meshes: bool,
     keep_visuals: bool,
+    add_motor_actuators: bool,
+    motor_force_limit: float,
+    base_body_name: str,
 ) -> None:
     """Load URDF with MuJoCo and save compiled MJCF XML."""
     try:
@@ -385,6 +1005,36 @@ def convert_urdf_to_mjcf(
         mujoco.mj_saveLastXML(str(output_path), model)
         print(f"[OK] Saved MJCF XML: {output_path}")
 
+        ensure_robot_default_classes_in_mjcf(output_path)
+        print("[OK] Ensured robot default classes: robot / motor / visual / collision.")
+
+        visual_count, collision_count = assign_geom_classes_to_mjcf(output_path)
+        print(f"[OK] Assigned visual parameters to {visual_count} visual mesh geom(s).")
+        print(f"[OK] Assigned collision parameters to {collision_count} collision/contact geom(s).")
+
+        add_freejoint_to_base_body(output_path, base_body_name=base_body_name)
+
+        texture_created, material_created, light_created, floor_created = ensure_light_and_floor_in_mjcf(output_path)
+        print(
+            "[OK] Ensured checker floor asset: "
+            f"texture texplane ({'created' if texture_created else 'updated'}), "
+            f"material MatPlane ({'created' if material_created else 'updated'})."
+        )
+        print(
+            "[OK] Ensured world light/floor: "
+            f"main_light ({'created' if light_created else 'updated'}), "
+            f"floor ({'created' if floor_created else 'updated'})."
+        )
+
+        if add_motor_actuators:
+            added = add_motor_actuators_to_mjcf(output_path, force_limit=motor_force_limit)
+            limit_text = format_mjcf_number(abs(motor_force_limit))
+            print(f"[OK] Added {added} motor actuator(s) for scalar movable joint(s).")
+            print(
+                f"[WARN] Motor ctrlrange/forcerange is set to -{limit_text} {limit_text}. "
+                "Please edit the generated XML manually if your robot needs different torque limits."
+            )
+
         if keep_temp and compile_path != urdf_path:
             temp_copy = output_path.with_name(output_path.stem + "_resolved_mesh_paths.urdf")
             shutil.copy2(compile_path, temp_copy)
@@ -402,6 +1052,11 @@ def main() -> int:
         "--path",
         required=True,
         help="Path to the input .urdf file.",
+    )
+    parser.add_argument(
+        "--base",
+        required=True,
+        help="Required MJCF body name to receive <freejoint/>, e.g. --base=base_link.",
     )
     parser.add_argument(
         "--output",
@@ -450,6 +1105,17 @@ def main() -> int:
         action="store_true",
         help="Use MuJoCo's URDF default and discard pure visual meshes. By default this script keeps visuals.",
     )
+    parser.add_argument(
+        "--no-actuator",
+        action="store_true",
+        help="Do not add default motor actuators after URDF conversion.",
+    )
+    parser.add_argument(
+        "--motor-force-limit",
+        type=float,
+        default=99.0,
+        help="Absolute ctrlrange/forcerange limit for generated motor actuators. Default: 99.",
+    )
 
     args = parser.parse_args()
 
@@ -467,6 +1133,9 @@ def main() -> int:
             overwrite=args.overwrite,
             allow_missing_meshes=args.allow_missing_meshes,
             keep_visuals=not args.discard_visual,
+            add_motor_actuators=not args.no_actuator,
+            motor_force_limit=args.motor_force_limit,
+            base_body_name=args.base,
         )
         return 0
     except Exception as exc:
