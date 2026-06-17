@@ -68,20 +68,43 @@ mujoco_sim/
 
 ## URDF 转换工具
 
-`utils/urdf2xml.py` 使用 MuJoCo 官方 API 将 URDF 模型转为 MJCF XML：
+`utils/urdf2xml.py` 使用 MuJoCo 官方 API 将 URDF 模型转为 MJCF XML，并自动注入光源、地板、默认类、作动器等仿真所需元素。
 
 ```bash
 # 基本用法（输出默认在同目录，.urdf → .xml）
-python utils/urdf2xml.py --path=/path/to/robot.urdf
+python utils/urdf2xml.py --path=/path/to/robot.urdf --base=base_link
 
 # 指定输出路径 + 覆盖已有文件
-python utils/urdf2xml.py --path=/path/to/robot.urdf --output=/path/to/robot.xml --overwrite
+python utils/urdf2xml.py --path=/path/to/robot.urdf --base=base_link --output=/path/to/robot.xml --overwrite
 ```
 
-默认行为：
-- **修复 mesh 路径**：自动将相对路径/`package://` 转为绝对路径，搜索顺序 `./meshes/` → `../meshes/` → 包目录
-- **保留视觉网格**：注入 `<compiler discardvisual="false"/>`，防止 MuJoCo 丢弃 URDF `<visual>` 几何体
-- 可用 `--discard-visual` 恢复 MuJoCo 默认行为，`--package-map pkg=/path` 手动指定包路径
+### 命令行参数
+
+| 参数 | 说明 |
+|---|---|
+| `--path` (必填) | 输入 .urdf 文件路径 |
+| `--base` (必填) | 接收 `<freejoint/>` 的 body 名称，如 `--base=base_link`。若该 body 不存在，脚本会自动创建并包裹 `<worldbody>` 子元素 |
+| `--output` | 输出 .xml 路径，默认与 URDF 同目录同名 |
+| `--overwrite` | 覆盖已有输出文件 |
+| `--package-map` | 手动指定包路径映射，如 `--package-map pkg=/path/to/pkg`，可多次使用 |
+| `--package-root` | ROS 包文件夹目录，用于自动发现包，可多次使用 |
+| `--no-mesh-fix` | 不重写 mesh 路径（跳过绝对路径替换） |
+| `--allow-missing-meshes` | 即使部分 mesh 文件找不到也继续编译 |
+| `--keep-temp` | 在输出 XML 旁边保存一份解析了 mesh 路径的临时 URDF |
+| `--discard-visual` | 恢复 MuJoCo 默认行为，丢弃纯视觉网格（默认会保留） |
+| `--no-actuator` | 不自动添加 motor 作动器 |
+| `--motor-force-limit` | motor 作动器 ctrlrange/forcerange 限幅，默认 99.0 |
+
+### 后处理流水线
+
+脚本在 URDF → MJCF 编译完成后，自动执行以下后处理：
+
+1. **Robot 默认类层次**：写入 `robot / motor / visual / collision` 四级 default class 树
+2. **Geom 分类**：视觉 mesh geom 分配 `group=2` + 无碰撞，碰撞 geom 分配 `group=1` + 完整接触参数
+3. **浮动基座**：在 `--base` 指定的 body 上插入 `<freejoint/>`
+4. **地板**：添加 checker 纹理 + MatPlane 材质 + 地面平面 geom (`group=0`)
+5. **光源**：添加非阴影方向光 `main_light`
+6. **Motor 作动器**：为所有标量可动关节添加 `<motor>`（ctrlrange/forcerange = ±99）
 
 ---
 
