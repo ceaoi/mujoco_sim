@@ -64,6 +64,25 @@ mujoco_sim/
 3. 实现 `update_obs()`, `update_model_in()`, `update_action()`, `update_tau()`
 4. 运行 `python ./run_script.py --filename=xxx`
 
+# 其他
+
+## URDF 转换工具
+
+`utils/urdf2xml.py` 使用 MuJoCo 官方 API 将 URDF 模型转为 MJCF XML：
+
+```bash
+# 基本用法（输出默认在同目录，.urdf → .xml）
+python utils/urdf2xml.py --path=/path/to/robot.urdf
+
+# 指定输出路径 + 覆盖已有文件
+python utils/urdf2xml.py --path=/path/to/robot.urdf --output=/path/to/robot.xml --overwrite
+```
+
+默认行为：
+- **修复 mesh 路径**：自动将相对路径/`package://` 转为绝对路径，搜索顺序 `./meshes/` → `../meshes/` → 包目录
+- **保留视觉网格**：注入 `<compiler discardvisual="false"/>`，防止 MuJoCo 丢弃 URDF `<visual>` 几何体
+- 可用 `--discard-visual` 恢复 MuJoCo 默认行为，`--package-map pkg=/path` 手动指定包路径
+
 ---
 
 > 本项目由 Claude Code 协助开发
