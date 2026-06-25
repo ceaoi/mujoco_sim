@@ -1,0 +1,105 @@
+<mujoco model="rough_terrain">
+
+    <default>
+        <default class="terrain">
+            <geom contype="1" conaffinity="1" condim="3"
+                  friction="1 0.01 0.01" group="0"/>
+        </default>
+    </default>
+
+    <worldbody>
+        <!-- ===== Flat ground before stairs ===== -->
+        <geom name="ground_start" class="terrain"
+              type="box" size="1.0 4.0 0.03" pos="-0.5 0 0.03"
+              rgba="0.45 0.50 0.55 1"/>
+
+        <!-- ===== Low stairs: 5 steps ascending, 0.08m rise, 0.30m deep ===== -->
+        <geom name="stair_a1" class="terrain"
+              type="box" size="0.15 4.0 0.04" pos="0.50 0 0.04"
+              rgba="0.55 0.50 0.45 1"/>
+        <geom name="stair_a2" class="terrain"
+              type="box" size="0.15 4.0 0.08" pos="0.80 0 0.08"
+              rgba="0.50 0.45 0.40 1"/>
+        <geom name="stair_a3" class="terrain"
+              type="box" size="0.15 4.0 0.12" pos="1.10 0 0.12"
+              rgba="0.45 0.40 0.35 1"/>
+        <geom name="stair_a4" class="terrain"
+              type="box" size="0.15 4.0 0.16" pos="1.40 0 0.16"
+              rgba="0.40 0.35 0.30 1"/>
+        <geom name="stair_a5" class="terrain"
+              type="box" size="0.15 4.0 0.20" pos="1.70 0 0.20"
+              rgba="0.35 0.30 0.25 1"/>
+
+        <!-- Low platform: 2m long, 0.40m high -->
+        <geom name="platform_low" class="terrain"
+              type="box" size="1.0 4.0 0.20" pos="2.85 0 0.20"
+              rgba="0.35 0.45 0.35 1"/>
+
+        <!-- Low stairs: 5 steps descending -->
+        <geom name="stair_d1" class="terrain"
+              type="box" size="0.15 4.0 0.20" pos="4.00 0 0.20"
+              rgba="0.35 0.30 0.25 1"/>
+        <geom name="stair_d2" class="terrain"
+              type="box" size="0.15 4.0 0.16" pos="4.30 0 0.16"
+              rgba="0.40 0.35 0.30 1"/>
+        <geom name="stair_d3" class="terrain"
+              type="box" size="0.15 4.0 0.12" pos="4.60 0 0.12"
+              rgba="0.45 0.40 0.35 1"/>
+        <geom name="stair_d4" class="terrain"
+              type="box" size="0.15 4.0 0.08" pos="4.90 0 0.08"
+              rgba="0.50 0.45 0.40 1"/>
+        <geom name="stair_d5" class="terrain"
+              type="box" size="0.15 4.0 0.04" pos="5.20 0 0.04"
+              rgba="0.55 0.50 0.45 1"/>
+
+        <!-- Flat ground between stair sets -->
+        <geom name="ground_mid" class="terrain"
+              type="box" size="2.0 4.0 0.03" pos="7.35 0 0.03"
+              rgba="0.45 0.50 0.55 1"/>
+
+        <!-- ===== Tall stairs: 5 steps ascending, 0.15m rise, 0.30m deep ===== -->
+        <geom name="stair_ta1" class="terrain"
+              type="box" size="0.15 4.0 0.075" pos="12.00 0 0.075"
+              rgba="0.60 0.40 0.30 1"/>
+        <geom name="stair_ta2" class="terrain"
+              type="box" size="0.15 4.0 0.150" pos="12.30 0 0.150"
+              rgba="0.55 0.35 0.25 1"/>
+        <geom name="stair_ta3" class="terrain"
+              type="box" size="0.15 4.0 0.225" pos="12.60 0 0.225"
+              rgba="0.50 0.30 0.20 1"/>
+        <geom name="stair_ta4" class="terrain"
+              type="box" size="0.15 4.0 0.300" pos="12.90 0 0.300"
+              rgba="0.45 0.25 0.15 1"/>
+        <geom name="stair_ta5" class="terrain"
+              type="box" size="0.15 4.0 0.375" pos="13.20 0 0.375"
+              rgba="0.40 0.20 0.10 1"/>
+
+        <!-- Tall platform: 2m long, 0.75m high -->
+        <geom name="platform_tall" class="terrain"
+              type="box" size="1.0 4.0 0.375" pos="14.35 0 0.375"
+              rgba="0.35 0.45 0.35 1"/>
+
+        <!-- Tall stairs: 5 steps descending -->
+        <geom name="stair_td1" class="terrain"
+              type="box" size="0.15 4.0 0.375" pos="15.50 0 0.375"
+              rgba="0.40 0.20 0.10 1"/>
+        <geom name="stair_td2" class="terrain"
+              type="box" size="0.15 4.0 0.300" pos="15.80 0 0.300"
+              rgba="0.45 0.25 0.15 1"/>
+        <geom name="stair_td3" class="terrain"
+              type="box" size="0.15 4.0 0.225" pos="16.10 0 0.225"
+              rgba="0.50 0.30 0.20 1"/>
+        <geom name="stair_td4" class="terrain"
+              type="box" size="0.15 4.0 0.150" pos="16.40 0 0.150"
+              rgba="0.55 0.35 0.25 1"/>
+        <geom name="stair_td5" class="terrain"
+              type="box" size="0.15 4.0 0.075" pos="16.70 0 0.075"
+              rgba="0.60 0.40 0.30 1"/>
+
+        <!-- Flat ground after all stairs -->
+        <geom name="ground_end" class="terrain"
+              type="box" size="2.0 4.0 0.03" pos="18.70 0 0.03"
+              rgba="0.45 0.50 0.55 1"/>
+    </worldbody>
+
+</mujoco>

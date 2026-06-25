@@ -37,7 +37,12 @@ class MujocoDeploy:
         self.cmd = np.array(config.get("cmd_init", [0.0, 0.0, 0.0]), dtype=np.float32)
 
         ball_xml_path = f"{self.mujoco_workspace_dir}/robots/ball/ball.xml"
-        merged_xml_path = self._build_merged_xml(xml_path, ball_xml_path)
+
+        terrain_xml_path = config.get("terrain_xml_path")
+        if terrain_xml_path is not None:
+            terrain_xml_path = terrain_xml_path.replace("{mujoco_workspace_dir}", self.mujoco_workspace_dir)
+
+        merged_xml_path = self._build_merged_xml(xml_path, ball_xml_path, terrain_xml_path)
         self.robot = mujoco.MjModel.from_xml_path(merged_xml_path)
         self.data = mujoco.MjData(self.robot)
         self.robot.opt.timestep = self.sim_dt
@@ -189,7 +194,7 @@ class MujocoDeploy:
 
         self.prev_a_pressed = a_pressed
 
-    def _build_merged_xml(self, robot_xml_path, ball_xml_path):
+    def _build_merged_xml(self, robot_xml_path, ball_xml_path, terrain_xml_path=None):
         robot_xml_path = Path(robot_xml_path).resolve()
         ball_xml_path = Path(ball_xml_path).resolve()
 
@@ -204,11 +209,21 @@ class MujocoDeploy:
         robot_rel = os.path.relpath(robot_xml_path, start=out_dir)
         ball_rel = os.path.relpath(ball_xml_path, start=out_dir)
 
+        includes = f"""<include file="{robot_rel}"/>
+        <include file="{ball_rel}"/>"""
+
+        if terrain_xml_path is not None:
+            terrain_xml_path = Path(terrain_xml_path).resolve()
+            if not terrain_xml_path.exists():
+                raise FileNotFoundError(f"terrain xml not found: {terrain_xml_path}")
+            terrain_rel = os.path.relpath(terrain_xml_path, start=out_dir)
+            includes += f"""
+        <include file="{terrain_rel}"/>"""
+
         merged_text = f"""<mujoco model="merged_scene">
-            <include file="{robot_rel}"/>
-            <include file="{ball_rel}"/>
-        </mujoco>
-        """
+        {includes}
+    </mujoco>
+    """
 
         merged_xml_path.write_text(merged_text, encoding="utf-8")
 
