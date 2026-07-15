@@ -327,6 +327,293 @@ def rewrite_mesh_filenames(
 
 
 
+
+def _version_tuple(version_text: str) -> Tuple[int, int, int]:
+    """Parse the numeric prefix of a semantic version like 3.3.1 or 3.4.0.dev0."""
+    nums = [int(x) for x in re.findall(r"\d+", version_text)[:3]]
+    while len(nums) < 3:
+        nums.append(0)
+    return tuple(nums[:3])  # type: ignore[return-value]
+
+
+def prepare_urdf_root_for_floating_base(
+    urdf_path: Path,
+    base_body_name: str,
+    *,
+    enable_saveinertial: bool,
+) -> str:
+    """
+    Preserve the URDF root link as a real MJCF body before MuJoCo compilation.
+
+    MuJoCo maps the URDF root link to MJCF worldbody. worldbody cannot have an
+    inertial element or a joint. Adding a freejoint only after mj_saveLastXML()
+    therefore creates a new body too late: the original root-link inertia has
+    already been lost from the saved MJCF structure.
+
+    We solve this before compilation by adding a synthetic massless URDF root
+    link and a fixed joint from that synthetic root to the requested base link.
+    compiler fusestatic="false" is required so the fixed child is not fused
+    back into worldbody. After MJCF export, the temporary wrapper is removed and
+    the preserved base body is promoted to a direct child of <worldbody>; only
+    then can add_freejoint_to_base_body() legally add the floating-base joint.
+    """
+    tree = ET.parse(urdf_path)
+    root = tree.getroot()
+    if _local_tag(root.tag) != "robot":
+        raise ValueError(f"Expected URDF root <robot>, got <{root.tag}>")
+
+    link_names = {
+        elem.attrib.get("name")
+        for elem in root
+        if _local_tag(elem.tag) == "link" and elem.attrib.get("name")
+    }
+    if base_body_name not in link_names:
+        raise RuntimeError(
+            f"URDF has no <link name='{base_body_name}'>. Available links include: "
+            + ", ".join(sorted(link_names)[:20]) # type: ignore
+        )
+
+    child_links = set()
+    for joint in root:
+        if _local_tag(joint.tag) != "joint":
+            continue
+        for child in joint:
+            if _local_tag(child.tag) == "child" and child.attrib.get("link"):
+                child_links.add(child.attrib["link"])
+
+    if base_body_name in child_links:
+        raise RuntimeError(
+            f"--base='{base_body_name}' is not the URDF root link; it already has a parent joint. "
+            "Choose the actual URDF root link as --base."
+        )
+
+    mujoco_ext = next((e for e in root if _local_tag(e.tag) == "mujoco"), None)
+    if mujoco_ext is None:
+        mujoco_ext = ET.Element("mujoco")
+        root.insert(0, mujoco_ext)
+
+    compiler = next((e for e in mujoco_ext if _local_tag(e.tag) == "compiler"), None)
+    if compiler is None:
+        compiler = ET.SubElement(mujoco_ext, "compiler")
+
+    compiler.set("fusestatic", "false")
+    if enable_saveinertial:
+        compiler.set("saveinertial", "true")
+
+    synthetic_root = "__mujoco_world__"
+    suffix = 1
+    while synthetic_root in link_names:
+        synthetic_root = f"__mujoco_world_{suffix}__"
+        suffix += 1
+
+    synthetic_joint = "__mujoco_world_to_base__"
+    existing_joint_names = {
+        elem.attrib.get("name")
+        for elem in root
+        if _local_tag(elem.tag) == "joint" and elem.attrib.get("name")
+    }
+    suffix = 1
+    while synthetic_joint in existing_joint_names:
+        synthetic_joint = f"__mujoco_world_to_base_{suffix}__"
+        suffix += 1
+
+    ET.SubElement(root, "link", {"name": synthetic_root})
+    joint = ET.SubElement(root, "joint", {"name": synthetic_joint, "type": "fixed"})
+    ET.SubElement(joint, "parent", {"link": synthetic_root})
+    ET.SubElement(joint, "child", {"link": base_body_name})
+
+    ET.indent(tree, space="  ")
+    tree.write(urdf_path, encoding="utf-8", xml_declaration=True)
+    print(
+        f"[OK] Preserved URDF root '{base_body_name}' as an MJCF body via synthetic root '{synthetic_root}'."
+    )
+    print('[OK] Set URDF compiler fusestatic="false" so the base body cannot be fused into worldbody.')
+    if enable_saveinertial:
+        print('[OK] Enabled compiler saveinertial="true" so saved MJCF bodies get explicit <inertial> clauses.')
+
+    return synthetic_root
+
+
+def promote_base_body_from_synthetic_root(
+    xml_path: Path,
+    base_body_name: str,
+    synthetic_root_name: str,
+) -> bool:
+    """Promote the preserved base body to a direct child of ``<worldbody>``.
+
+    During URDF compilation we temporarily add a synthetic URDF root so MuJoCo
+    preserves the original URDF root link as a real MJCF ``<body>`` with its
+    inertia.  The exported MJCF therefore has the temporary hierarchy::
+
+        worldbody
+          body synthetic_root
+            body base_body
+
+    A MuJoCo free joint is only legal on a top-level body, i.e. a body that is a
+    direct child of ``<worldbody>``.  This function removes the temporary wrapper
+    and moves ``base_body`` into the wrapper's former position before the
+    freejoint is added.
+
+    The synthetic root is created with an identity fixed transform and no
+    physical content, so promotion preserves the base pose and dynamics.  The
+    function fails loudly if the exported structure contains unexpected content
+    instead of silently discarding it.
+    """
+    xml_path = xml_path.expanduser().resolve()
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    if _local_tag(root.tag) != "mujoco":
+        raise ValueError(f"Expected MJCF root <mujoco>, got <{root.tag}>")
+
+    worldbody = _find_worldbody(root)
+
+    synthetic_root: Optional[ET.Element] = None
+    synthetic_index: Optional[int] = None
+    for idx, child in enumerate(list(worldbody)):
+        if _local_tag(child.tag) == "body" and child.attrib.get("name") == synthetic_root_name:
+            synthetic_root = child
+            synthetic_index = idx
+            break
+
+    if synthetic_root is None:
+        # Idempotent behavior: if base is already top-level, there is nothing to do.
+        for child in list(worldbody):
+            if _local_tag(child.tag) == "body" and child.attrib.get("name") == base_body_name:
+                print(f"[INFO] Base body '{base_body_name}' is already a direct child of <worldbody>.")
+                return False
+        raise RuntimeError(
+            f"Synthetic root body '{synthetic_root_name}' was not found as a direct child of <worldbody>, "
+            f"and base body '{base_body_name}' is not already top-level."
+        )
+
+    # The temporary synthetic root must have identity pose.  Our generated URDF
+    # fixed joint has no <origin>, so any non-identity transform indicates that
+    # the file was modified or the structure is not the one we created.
+    transform_attrs = {"pos", "quat", "axisangle", "euler", "xyaxes", "zaxis"}
+    unexpected_transforms = {k: v for k, v in synthetic_root.attrib.items() if k in transform_attrs}
+    if unexpected_transforms:
+        raise RuntimeError(
+            f"Synthetic root '{synthetic_root_name}' unexpectedly has transform attributes "
+            f"{unexpected_transforms}. Refusing to promote the base without composing transforms."
+        )
+
+    base_body: Optional[ET.Element] = None
+    for child in list(synthetic_root):
+        if _local_tag(child.tag) == "body" and child.attrib.get("name") == base_body_name:
+            base_body = child
+            break
+
+    if base_body is None:
+        direct_body_names = [
+            child.attrib.get("name", "<unnamed>")
+            for child in list(synthetic_root)
+            if _local_tag(child.tag) == "body"
+        ]
+        raise RuntimeError(
+            f"Base body '{base_body_name}' is not a direct child of synthetic root "
+            f"'{synthetic_root_name}'. Direct child bodies are: {direct_body_names or ['<none>']}"
+        )
+
+    # The synthetic root is intentionally empty except for the preserved base.
+    # With compiler saveinertial="true", MuJoCo may save an explicit zero-mass
+    # <inertial> even for this dummy static wrapper.  That inertial is safe to
+    # discard only after verifying that it carries no physical mass/inertia.
+    unexpected_children = []
+    for child in list(synthetic_root):
+        if child is base_body:
+            continue
+
+        tag = _local_tag(child.tag)
+        if tag == "inertial":
+            try:
+                mass = float(child.attrib.get("mass", "0"))
+                diag = [float(x) for x in child.attrib.get("diaginertia", "0 0 0").split()]
+                full = [float(x) for x in child.attrib.get("fullinertia", "").split()]
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"Synthetic root '{synthetic_root_name}' has an invalid inertial: {child.attrib}."
+                ) from exc
+
+            inertia_values = full if full else diag
+            if abs(mass) <= 1e-12 and all(abs(x) <= 1e-12 for x in inertia_values):
+                # Harmless serialization artifact from saveinertial=true.
+                continue
+
+        name = child.attrib.get("name")
+        unexpected_children.append(f"<{tag}>" + (f" name='{name}'" if name else ""))
+
+    if unexpected_children:
+        raise RuntimeError(
+            f"Synthetic root '{synthetic_root_name}' contains unexpected child elements: "
+            + ", ".join(unexpected_children)
+            + ". Refusing to remove the wrapper because doing so could discard model content."
+        )
+
+    assert synthetic_index is not None
+    synthetic_root.remove(base_body)
+    worldbody.remove(synthetic_root)
+    worldbody.insert(synthetic_index, base_body)
+
+    ET.indent(tree, space="  ")
+    tree.write(xml_path, encoding="utf-8", xml_declaration=True)
+
+    print(
+        f"[OK] Promoted body '{base_body_name}' from synthetic root '{synthetic_root_name}' "
+        "to a direct child of <worldbody>."
+    )
+    return True
+
+
+def assert_base_has_explicit_inertial(xml_path: Path, base_body_name: str) -> None:
+    """Fail early if the exported MJCF base body has no explicit inertial."""
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    base = _find_body_by_name(root, base_body_name)
+    if base is None:
+        raise RuntimeError(f"Exported MJCF has no <body name='{base_body_name}'>.")
+    inertial = next((c for c in list(base) if _local_tag(c.tag) == "inertial"), None)
+    if inertial is None:
+        raise RuntimeError(
+            f"Exported MJCF body '{base_body_name}' has no explicit <inertial>. "
+            "Refusing to continue because later collision-geom density=0 would make the base massless."
+        )
+    try:
+        mass = float(inertial.attrib.get("mass", "0"))
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid base inertial mass: {inertial.attrib.get('mass')}") from exc
+    if mass <= 0:
+        raise RuntimeError(f"Base body '{base_body_name}' has non-positive mass {mass}.")
+    print(f"[OK] Verified explicit base inertial before geom post-processing: mass={mass:.9g}.")
+
+
+def validate_final_mass_preservation(
+    mujoco_module,
+    xml_path: Path,
+    expected_total_mass: float,
+    base_body_name: str,
+) -> None:
+    """Reload the final MJCF and verify that post-processing did not change robot mass."""
+    final_model = mujoco_module.MjModel.from_xml_path(str(xml_path))
+    final_total_mass = float(sum(final_model.body_mass))
+    mass_diff = abs(final_total_mass - expected_total_mass)
+    mass_tol = 1e-5
+
+    if mass_diff > mass_tol:
+        raise RuntimeError(
+            "Final MJCF total mass changed during post-processing: "
+            f"before={expected_total_mass:.9f}, "
+            f"after={final_total_mass:.9f}, "
+            f"diff={mass_diff:.9e}, "
+            f"tolerance={mass_tol:.1e}"
+        )
+
+    print(
+        "[OK] Final mass validation passed: "
+        f"before={expected_total_mass:.9f}, "
+        f"after={final_total_mass:.9f}, "
+        f"diff={mass_diff:.3e} kg."
+    )
+
 def format_mjcf_number(value: float) -> str:
     """Format a number for compact MJCF attributes."""
     if float(value).is_integer():
@@ -673,14 +960,15 @@ def add_freejoint_to_base_body(xml_path: Path, base_body_name: str) -> bool:
     """
     Add <freejoint/> using the user-specified --base name.
 
-    Simple policy:
-      - If <body name=--base> exists, insert <freejoint/> into that body.
-      - If it does not exist, create <body name=--base> under <worldbody>, move all
-        existing direct worldbody children into it, then insert <freejoint/>.
+    Policy:
+      - <body name=--base> must already exist in the exported MJCF.
+      - Insert <freejoint/> into that body.
+      - If the body is absent, fail instead of wrapping <worldbody> after compilation.
 
-    The second case is needed because MuJoCo's URDF compiler often flattens the
-    URDF root link, so a URDF link named base_link may become geoms directly under
-    <worldbody> instead of an MJCF <body name="base_link">.
+    The base body is now preserved before URDF compilation by
+    prepare_urdf_root_for_floating_base(), so a missing base body indicates a real
+    conversion problem. Wrapping worldbody children after compilation is unsafe
+    because the URDF root-link inertial has already been discarded at that point.
     """
     xml_path = xml_path.expanduser().resolve()
     if not base_body_name or not base_body_name.strip():
@@ -701,16 +989,12 @@ def add_freejoint_to_base_body(xml_path: Path, base_body_name: str) -> bool:
 
     if target_body is None:
         available_names = _collect_body_names(root, limit=20)
-        print(
-            f"[WARN] MJCF body name='{base_body_name}' was not found. "
-            "This is common when the URDF root link is flattened into <worldbody>."
+        details = ", ".join(available_names) if available_names else "<none>"
+        raise RuntimeError(
+            f"MJCF body name='{base_body_name}' was not found after URDF compilation. "
+            "Do not wrap worldbody children after compilation: that loses the URDF root-link inertia. "
+            f"Existing body names include: {details}"
         )
-        if available_names:
-            print("[INFO] Existing body names before wrapping include:")
-            for name in available_names:
-                print(f"       - {name}")
-        target_body = _wrap_worldbody_children_as_base(worldbody, base_body_name)
-        print(f"[OK] Wrapped direct <worldbody> children into <body name='{base_body_name}'>.")
 
     if body_has_direct_freejoint_or_free_joint(target_body):
         print(f"[INFO] Body '{base_body_name}' already has a freejoint/free joint. Skip adding another one.")
@@ -993,17 +1277,48 @@ def convert_urdf_to_mjcf(
             compile_path = temp_urdf
             print('[INFO] Keeping URDF visual meshes: injected/updated <compiler discardvisual="false"/>.')
 
+        # Always prepare a temporary URDF copy before compilation. The original URDF is never modified.
+        if compile_path == urdf_path:
+            temp_urdf = temp_dir / urdf_path.name
+            shutil.copy2(urdf_path, temp_urdf)
+            compile_path = temp_urdf
+
+        saveinertial_supported = _version_tuple(getattr(mujoco, "__version__", "0.0.0")) >= (3, 3, 1)
+        synthetic_root_name = prepare_urdf_root_for_floating_base(
+            compile_path,
+            base_body_name=base_body_name,
+            enable_saveinertial=saveinertial_supported,
+        )
+        if not saveinertial_supported:
+            print(
+                f"[WARN] MuJoCo {getattr(mujoco, '__version__', 'unknown')} is older than 3.3.1; "
+                "compiler saveinertial is unavailable. Explicit URDF inertials will still be preserved."
+            )
+
         print(f"[INFO] Loading URDF: {urdf_path}")
-        if compile_path != urdf_path:
-            print(f"[INFO] Using temporary URDF: {compile_path}")
+        print(f"[INFO] Using prepared temporary URDF: {compile_path}")
 
         model = mujoco.MjModel.from_xml_path(str(compile_path))
+        expected_total_mass = float(sum(model.body_mass))
+        print(f"[INFO] Compiled robot total mass before MJCF post-processing: {expected_total_mass:.9g}")
 
         if output_path.exists() and overwrite:
             output_path.unlink()
 
         mujoco.mj_saveLastXML(str(output_path), model)
         print(f"[OK] Saved MJCF XML: {output_path}")
+
+        # The synthetic URDF root was only needed during compilation to preserve
+        # base_link as a real body with inertia.  Remove that temporary MJCF wrapper
+        # now, so the base becomes top-level and can legally receive a freejoint.
+        promote_base_body_from_synthetic_root(
+            output_path,
+            base_body_name=base_body_name,
+            synthetic_root_name=synthetic_root_name,
+        )
+
+        # This must pass before assign_geom_classes_to_mjcf() sets collision density=0.
+        assert_base_has_explicit_inertial(output_path, base_body_name)
 
         ensure_robot_default_classes_in_mjcf(output_path)
         print("[OK] Ensured robot default classes: robot / motor / visual / collision.")
@@ -1034,6 +1349,13 @@ def convert_urdf_to_mjcf(
                 f"[WARN] Motor ctrlrange/forcerange is set to -{limit_text} {limit_text}. "
                 "Please edit the generated XML manually if your robot needs different torque limits."
             )
+
+        validate_final_mass_preservation(
+            mujoco,
+            output_path,
+            expected_total_mass=expected_total_mass,
+            base_body_name=base_body_name,
+        )
 
         if keep_temp and compile_path != urdf_path:
             temp_copy = output_path.with_name(output_path.stem + "_resolved_mesh_paths.urdf")
