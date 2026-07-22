@@ -1,6 +1,6 @@
 from mujoco_sim.scripts.zb02w_flat import Zb02wFlatDeploy
 
-yaml_filename = "zb02w_rough.yaml"
+yaml_filename = "zb02w_ts.yaml"
 
 class Zb02wRoughDeploy(Zb02wFlatDeploy):
     pass
