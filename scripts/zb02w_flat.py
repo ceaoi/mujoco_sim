@@ -30,6 +30,8 @@ class Zb02wFlatDeploy(MujocoDeployWl):
             self.kpsVel,
             self.kdsVel,
         )
+        pj.send_data("targ_pos", self.targ_dof_pos)
+        pj.send_data("targ_vel", self.targ_dof_vel)
         pj.send_data("tau", self.tau)
 
     def update_model_in(self):

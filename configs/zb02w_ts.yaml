@@ -30,7 +30,7 @@ default_angles_leg: [0.0,  0.0,  0.0,  0.0,
                      0.4,  0.4, -0.4, -0.4,
                     -0.8,  -0.8, 0.8,  0.8]
 
-max_command_rate: [3.0, 3.0, 3.0]
+max_command_rate: [4.0, 4.0, 4.0]
 action_scale_pos: 0.5
 action_scale_vel: 20.0
 

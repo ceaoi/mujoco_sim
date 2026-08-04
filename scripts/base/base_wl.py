@@ -88,7 +88,10 @@ class MujocoDeployWl(MujocoDeploy):
             self.action[:self.num_actions_pos] * self.action_scale_pos + self.default_angles
         )
         self.targ_dof_vel = self.action[self.num_actions_pos:] * self.action_scale_vel
-        self.targ_dof_vel = self.targ_dof_vel * (np.abs(self.targ_dof_vel) >= self.wheel_action_vel_deadzone)
+        self.targ_dof_vel = np.sign(self.targ_dof_vel) * np.maximum(
+            np.abs(self.targ_dof_vel) - self.wheel_action_vel_deadzone,
+            0.0,
+        )
 
     def update_tau(self):
         self.tau[self.leg_actions_to_mujoco] = pd_ctrl(
