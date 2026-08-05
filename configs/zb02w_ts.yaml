@@ -41,7 +41,12 @@ num_obs_hist: 10
 
 cmd_init: [0.0, 0.0, 0.0]
 cmd_range: [1.0, 1.0, 1.0]
-cmd_deadzone: [0.01, 0.01, 0.01]
+cmd_deadzone: [0.0001, 0.01, 0.01]
 wheel_action_vel_deadzone: 0.1
+wheel_stop_pid_enabled: true
+wheel_stop_pid_kp: 1.0
+wheel_stop_pid_ki: 7.0
+wheel_stop_pid_kd: 0.00005
+wheel_stop_pid_output_limit: 20.0
 
 is_rnn: True

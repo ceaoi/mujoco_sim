@@ -8,6 +8,34 @@ from data_vis import PlotJugglerUDP
 plotjuggler = PlotJugglerUDP("localhost", 5005)
 
 
+def wheel_stop_pid(error, integral, previous_error, kp, ki, kd, dt, output_limit):
+    """Compute a vectorized wheel-speed PID correction with anti-windup."""
+    error = np.asarray(error, dtype=np.float32)
+    integral = np.asarray(integral, dtype=np.float32)
+    previous_error = np.asarray(previous_error, dtype=np.float32)
+
+    derivative = (error - previous_error) / np.float32(dt)
+    candidate_integral = integral + error * np.float32(dt)
+    unsaturated_output = kp * error + ki * candidate_integral + kd * derivative
+
+    if ki > 0.0:
+        drives_further_into_saturation = np.logical_or(
+            np.logical_and(unsaturated_output > output_limit, error > 0.0),
+            np.logical_and(unsaturated_output < -output_limit, error < 0.0),
+        )
+        new_integral = np.where(
+            drives_further_into_saturation,
+            integral,
+            candidate_integral,
+        )
+    else:
+        new_integral = integral.copy()
+
+    output = kp * error + ki * new_integral + kd * derivative
+    output = np.clip(output, -output_limit, output_limit).astype(np.float32, copy=False)
+    return output, new_integral.astype(np.float32, copy=False), error.copy()
+
+
 class MujocoDeployWl(MujocoDeploy):
 
     def _init_control(self):
@@ -28,12 +56,25 @@ class MujocoDeployWl(MujocoDeploy):
         self.action_scale_pos = np.float32(config["action_scale_pos"])
         self.action_scale_vel = np.float32(config["action_scale_vel"])
         self.wheel_action_vel_deadzone = np.float32(config["wheel_action_vel_deadzone"])
+        self.wheel_stop_pid_enabled = bool(config.get("wheel_stop_pid_enabled", False))
+        self.wheel_stop_pid_kp = np.float32(config.get("wheel_stop_pid_kp", 0.0))
+        self.wheel_stop_pid_ki = np.float32(config.get("wheel_stop_pid_ki", 0.0))
+        self.wheel_stop_pid_kd = np.float32(config.get("wheel_stop_pid_kd", 0.0))
+        self.wheel_stop_pid_output_limit = np.float32(
+            config.get("wheel_stop_pid_output_limit", 5.0)
+        )
+
+        if self.wheel_stop_pid_output_limit <= 0.0:
+            raise ValueError("wheel_stop_pid_output_limit must be greater than zero")
 
         self.num_actions_pos = int(config["num_actions_pos"])
         self.num_wheels = len(self.wheel_joint_idx)
 
         self.targ_dof_pos = self.default_angles.copy()
         self.targ_dof_vel = np.zeros(self.num_wheels, dtype=np.float32)
+        self.wheel_stop_pid_integral = np.zeros(self.num_wheels, dtype=np.float32)
+        self.wheel_stop_pid_previous_error = np.zeros(self.num_wheels, dtype=np.float32)
+        self.wheel_stop_pid_active = False
 
         policy_path = config["policy_path"].replace("{mujoco_workspace_dir}", self.mujoco_workspace_dir)
         self.is_rnn = bool(config.get("is_rnn", False))
@@ -58,6 +99,9 @@ class MujocoDeployWl(MujocoDeploy):
     def _reset_control(self):
         self.targ_dof_pos = self.default_angles.copy()
         self.targ_dof_vel[:] = 0.0
+        self.wheel_stop_pid_integral[:] = 0.0
+        self.wheel_stop_pid_previous_error[:] = 0.0
+        self.wheel_stop_pid_active = False
 
         if self.is_rnn:
             self.h_in[:] = 0.0
@@ -92,6 +136,32 @@ class MujocoDeployWl(MujocoDeploy):
             np.abs(self.targ_dof_vel) - self.wheel_action_vel_deadzone,
             0.0,
         )
+
+        if self.wheel_stop_pid_enabled and np.linalg.norm(self.cmd) < 1e-3:
+            wheel_velocity = self.data.qvel[6:][self.wheel_joint_idx]
+            wheel_velocity_error = -np.asarray(wheel_velocity, dtype=np.float32)
+            if not self.wheel_stop_pid_active:
+                self.wheel_stop_pid_previous_error[:] = wheel_velocity_error
+
+            pid_output, self.wheel_stop_pid_integral, self.wheel_stop_pid_previous_error = (
+                wheel_stop_pid(
+                    wheel_velocity_error,
+                    self.wheel_stop_pid_integral,
+                    self.wheel_stop_pid_previous_error,
+                    self.wheel_stop_pid_kp,
+                    self.wheel_stop_pid_ki,
+                    self.wheel_stop_pid_kd,
+                    self.ctrl_dt,
+                    self.wheel_stop_pid_output_limit,
+                )
+            )
+            self.targ_dof_vel = pid_output
+            self.wheel_stop_pid_active = True
+            # print(f"pid_output: {pid_output}")
+        else:
+            self.wheel_stop_pid_integral[:] = 0.0
+            self.wheel_stop_pid_previous_error[:] = 0.0
+            self.wheel_stop_pid_active = False
 
     def update_tau(self):
         self.tau[self.leg_actions_to_mujoco] = pd_ctrl(
