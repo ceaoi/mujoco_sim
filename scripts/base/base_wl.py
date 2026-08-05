@@ -155,7 +155,7 @@ class MujocoDeployWl(MujocoDeploy):
                     self.wheel_stop_pid_output_limit,
                 )
             )
-            self.targ_dof_vel = pid_output
+            self.targ_dof_vel += pid_output
             self.wheel_stop_pid_active = True
             # print(f"pid_output: {pid_output}")
         else:
