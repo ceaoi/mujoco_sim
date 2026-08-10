@@ -128,6 +128,7 @@ class MujocoDeployWl(MujocoDeploy):
             action = self.policy.run([self.policy_output_name], {self.policy_input_name: inp})[0]
             self.action = np.asarray(action, dtype=np.float32).squeeze()
 
+        plotjuggler.send_data("actions", self.action)
         self.targ_dof_pos = (
             self.action[:self.num_actions_pos] * self.action_scale_pos + self.default_angles
         )
@@ -155,6 +156,7 @@ class MujocoDeployWl(MujocoDeploy):
                     self.wheel_stop_pid_output_limit,
                 )
             )
+            pid_output *= (np.sign(self.targ_dof_vel) != np.sign(pid_output)) # pid用于抵抗蠕行,不允许pid输出与目标速度同向，避免pid加剧rl动作
             self.targ_dof_vel += pid_output
             self.wheel_stop_pid_active = True
             # print(f"pid_output: {pid_output}")
