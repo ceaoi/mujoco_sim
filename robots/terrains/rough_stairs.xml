@@ -7,6 +7,28 @@
         </default>
     </default>
 
+    <asset>
+        <texture name="height_label_texture_036" type="2d" file="height_labels/36cm.png"/>
+        <texture name="height_label_texture_050" type="2d" file="height_labels/50cm.png"/>
+        <texture name="height_label_texture_075" type="2d" file="height_labels/75cm.png"/>
+        <texture name="height_label_texture_087" type="2d" file="height_labels/87cm.png"/>
+        <texture name="height_label_texture_100" type="2d" file="height_labels/100cm.png"/>
+        <texture name="height_label_texture_120" type="2d" file="height_labels/120cm.png"/>
+
+        <material name="height_label_material_036" texture="height_label_texture_036"
+                  texrepeat="1 1" texuniform="false" specular="0" shininess="0"/>
+        <material name="height_label_material_050" texture="height_label_texture_050"
+                  texrepeat="1 1" texuniform="false" specular="0" shininess="0"/>
+        <material name="height_label_material_075" texture="height_label_texture_075"
+                  texrepeat="1 1" texuniform="false" specular="0" shininess="0"/>
+        <material name="height_label_material_087" texture="height_label_texture_087"
+                  texrepeat="1 1" texuniform="false" specular="0" shininess="0"/>
+        <material name="height_label_material_100" texture="height_label_texture_100"
+                  texrepeat="1 1" texuniform="false" specular="0" shininess="0"/>
+        <material name="height_label_material_120" texture="height_label_texture_120"
+                  texrepeat="1 1" texuniform="false" specular="0" shininess="0"/>
+    </asset>
+
     <worldbody>
         <!-- ===== Rear two-step row 1: 0.15m rise per step ===== -->
         <body name="terrain_rear15_left" pos="-4.0 4.0 0">
@@ -428,6 +450,52 @@
                   pos="1.860469 0 0.604657"
                   quat="0.952295509 0 0.305177431 0"
                   rgba="0.58 0.22 0.18 1"/>
+        </body>
+
+        <!-- ===== Left high platforms: 2m deep, 2m wide ===== -->
+        <body name="terrain_left_high_platforms" pos="0 10.0 0">
+            <geom name="platform_left_high_036" class="terrain"
+                  type="box" size="1.0 1.0 0.180" pos="-5.0 0 0.180"
+                  rgba="0.35 0.45 0.35 1"/>
+            <geom name="label_left_high_036" type="box"
+                  size="0.75 0.35 0.002" pos="-5.0 0 0.363"
+                  material="height_label_material_036" rgba="1 1 1 1"
+                  contype="0" conaffinity="0" group="2"/>
+            <geom name="platform_left_high_050" class="terrain"
+                  type="box" size="1.0 1.0 0.250" pos="-3.0 0 0.250"
+                  rgba="0.35 0.45 0.35 1"/>
+            <geom name="label_left_high_050" type="box"
+                  size="0.75 0.35 0.002" pos="-3.0 0 0.503"
+                  material="height_label_material_050" rgba="1 1 1 1"
+                  contype="0" conaffinity="0" group="2"/>
+            <geom name="platform_left_high_075" class="terrain"
+                  type="box" size="1.0 1.0 0.375" pos="-1.0 0 0.375"
+                  rgba="0.35 0.45 0.35 1"/>
+            <geom name="label_left_high_075" type="box"
+                  size="0.75 0.35 0.002" pos="-1.0 0 0.753"
+                  material="height_label_material_075" rgba="1 1 1 1"
+                  contype="0" conaffinity="0" group="2"/>
+            <geom name="platform_left_high_087" class="terrain"
+                  type="box" size="1.0 1.0 0.435" pos="1.0 0 0.435"
+                  rgba="0.35 0.45 0.35 1"/>
+            <geom name="label_left_high_087" type="box"
+                  size="0.75 0.35 0.002" pos="1.0 0 0.873"
+                  material="height_label_material_087" rgba="1 1 1 1"
+                  contype="0" conaffinity="0" group="2"/>
+            <geom name="platform_left_high_100" class="terrain"
+                  type="box" size="1.0 1.0 0.500" pos="3.0 0 0.500"
+                  rgba="0.35 0.45 0.35 1"/>
+            <geom name="label_left_high_100" type="box"
+                  size="0.75 0.35 0.002" pos="3.0 0 1.003"
+                  material="height_label_material_100" rgba="1 1 1 1"
+                  contype="0" conaffinity="0" group="2"/>
+            <geom name="platform_left_high_120" class="terrain"
+                  type="box" size="1.0 1.0 0.600" pos="5.0 0 0.600"
+                  rgba="0.35 0.45 0.35 1"/>
+            <geom name="label_left_high_120" type="box"
+                  size="0.75 0.35 0.002" pos="5.0 0 1.203"
+                  material="height_label_material_120" rgba="1 1 1 1"
+                  contype="0" conaffinity="0" group="2"/>
         </body>
     </worldbody>
 

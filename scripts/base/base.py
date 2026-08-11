@@ -12,6 +12,47 @@ from mujoco_sim.utils.gamepad_pygame import Gamepad
 from mujoco_sim.utils.projectile import ProjectileManager
 
 
+BASE_HUD_UPDATE_HZ = 20.0
+
+
+def _find_default_base_free_joint(model):
+    free_joint_ids = np.flatnonzero(model.jnt_type == mujoco.mjtJoint.mjJNT_FREE)
+    if free_joint_ids.size == 0:
+        raise ValueError("The model must contain a free joint for the default base HUD.")
+
+    joint_id = int(free_joint_ids[0])
+    return (
+        joint_id,
+        int(model.jnt_bodyid[joint_id]),
+        int(model.jnt_qposadr[joint_id]),
+        int(model.jnt_dofadr[joint_id]),
+    )
+
+
+def _base_state_from_free_joint(data, qpos_adr, dof_adr):
+    base_quat = data.qpos[qpos_adr + 3:qpos_adr + 7].copy()
+    w, x, y, z = base_quat
+    yaw_world = float(np.arctan2(
+        2.0 * (w * z + x * y),
+        1.0 - 2.0 * (y * y + z * z),
+    ))
+
+    linear_velocity_world = data.qvel[dof_adr:dof_adr + 3].copy()
+    rotation_base_to_world = np.empty(9, dtype=np.float64)
+    mujoco.mju_quat2Mat(rotation_base_to_world, base_quat)
+    linear_velocity_base = (
+        rotation_base_to_world.reshape(3, 3).T @ linear_velocity_world
+    )
+    angular_velocity_base = data.qvel[dof_adr + 3:dof_adr + 6].copy()
+
+    return (
+        float(data.qpos[qpos_adr + 2]),
+        yaw_world,
+        angular_velocity_base,
+        linear_velocity_base,
+    )
+
+
 class MujocoDeploy:
 
     mujoco_workspace_dir = str(Path(__file__).resolve().parents[2])
@@ -45,8 +86,18 @@ class MujocoDeploy:
         merged_xml_path = self._build_merged_xml(xml_path, ball_xml_path, terrain_xml_path)
         self.robot = mujoco.MjModel.from_xml_path(merged_xml_path)
         self.data = mujoco.MjData(self.robot)
+        (
+            self._base_joint_id,
+            self._base_body_id,
+            self._base_qpos_adr,
+            self._base_dof_adr,
+        ) = _find_default_base_free_joint(self.robot)
         self.robot.opt.timestep = self.sim_dt
         self.ctrl_dt = self.sim_dt * self.control_decimation
+        self._base_hud_update_interval = max(
+            1,
+            round(1.0 / (BASE_HUD_UPDATE_HZ * self.robot.opt.timestep)),
+        )
 
         self.gamepad = Gamepad(joystick_index=0)
         self.gamepad.connect()
@@ -120,8 +171,11 @@ class MujocoDeploy:
                 self.step()
 
                 if self.counter % 10 == 0:
-                    if self.follow_camera:
-                        self.set_camera_follow()
+                    with viewer.lock():
+                        if self.follow_camera:
+                            self.set_camera_follow()
+                    if self.counter % self._base_hud_update_interval == 0:
+                        self._update_base_state_hud()
                     viewer.sync()
 
                 remain = next_tick - time.perf_counter()
@@ -157,13 +211,45 @@ class MujocoDeploy:
         self.cmd[1] = 0.0 if abs(self.cmd[1]) < self.cmd_deadzone[1] else self.cmd[1]
         self.cmd[2] = 0.0 if abs(self.cmd[2]) < self.cmd_deadzone[2] else self.cmd[2]
 
-    # ---- camera ----
+    # ---- viewer ----
+
+    def _update_base_state_hud(self):
+        if self.viewer is None:
+            return
+
+        z_world, yaw_world, angular_velocity_base, linear_velocity_base = (
+            _base_state_from_free_joint(
+                self.data,
+                self._base_qpos_adr,
+                self._base_dof_adr,
+            )
+        )
+        labels = "\n".join((
+            "Base state",
+            "z_world [m]",
+            "yaw_world [rad]",
+            "omega_base [rad/s]",
+            "velocity_base [m/s]",
+        ))
+        values = "\n".join((
+            "",
+            f"{z_world:+.3f}",
+            f"{yaw_world:+.3f}",
+            "[" + ", ".join(f"{value:+.3f}" for value in angular_velocity_base) + "]",
+            "[" + ", ".join(f"{value:+.3f}" for value in linear_velocity_base) + "]",
+        ))
+        self.viewer.set_texts((
+            mujoco.mjtFontScale.mjFONTSCALE_150,
+            mujoco.mjtGridPos.mjGRID_TOPLEFT,
+            labels,
+            values,
+        ))
 
     def set_camera_follow(self):
         if self.viewer is None:
             return
 
-        base_pos = self.data.qpos[0:3].copy()
+        base_pos = self.data.qpos[self._base_qpos_adr:self._base_qpos_adr + 3].copy()
         camera_offset = np.array([-2.0, 0.0, 1.0], dtype=np.float32)
 
         self.viewer.cam.lookat[:] = base_pos

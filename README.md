@@ -47,7 +47,7 @@ conda activate ms
 pip install -r mujoco_sim/requirements.txt
 ```
 
-基础依赖包括 `mujoco`、`numpy`、`pyyaml`、`onnxruntime` 和 `pygame`。此外还需要准备：
+基础依赖包括 `mujoco>=3.9.0`、`numpy`、`pyyaml`、`onnxruntime` 和 `pygame`。MuJoCo 3.9 提供左上角 Base 状态 HUD 使用的 viewer 文本接口。此外还需要准备：
 
 - M20 / ZB02W：安装 [`data_vis`](https://github.com/ceaoi/data_vis)；当前轮足基类和入口会直接导入 `PlotJugglerUDP`，即使不打开 PlotJuggler 也必须能导入该 Python 包。
 - WH044X：编译可被 Python 导入的 `chassis` 扩展，并更新 `chassis_build_dir`。
@@ -82,6 +82,21 @@ python mujoco_sim/run_script.py --filename=wh044x
 ```bash
 python -m mujoco_sim.utils.gamepad_pygame --index 0 --hz 20
 ```
+
+## Base 状态 HUD
+
+所有继承 `MujocoDeploy` 的入口都会在 MuJoCo 界面左上角显示 Base 状态，无需增加 YAML 配置。默认 Base 是合并模型中第一个 `<freejoint/>` 所属的 body；当前 M20、ZB02W 和 WH044X 均先合并机器人、再合并弹丸，因此会选择机器人 Base，而不是弹丸的 free joint。
+
+HUD 以固定 20 Hz 刷新，数值保留三位小数；相机和 viewer 画面同步仍保持原有频率。当前 `simulation_dt=0.0005 s` 时，每 100 个仿真步更新一次 HUD。显示字段如下：
+
+| 字段 | 坐标系 | 单位 | 含义 |
+|---|---|---|---|
+| `z_world` | 世界系 | m | Base 原点的 Z 坐标 |
+| `yaw_world` | 世界系 | rad | Base 按 ZYX 欧拉角定义的 yaw，范围为 `[-π, π]` |
+| `omega_base` | Base 系 | rad/s | Base 三维角速度 `[x, y, z]`；MuJoCo free-joint 原生角速度 |
+| `velocity_base` | Base 系 | m/s | Base 三维线速度 `[x, y, z]`；由 free-joint 世界系线速度旋转到 Base 系 |
+
+界面使用 SI 单位：位置为米、角度为弧度、线速度为米每秒、角速度为弧度每秒。模型必须包含至少一个 free joint；如果没有，初始化会明确报错，因为无法按默认规则确定浮动 Base。
 
 ## 手柄操作
 
