@@ -1,6 +1,6 @@
 # MuJoCo Sim
 
-`mujoco_sim` 用于把训练得到的 ONNX 运动策略部署到 MuJoCo，并通过 Xbox 类手柄实时控制机器人。当前包含 M20、ZB02W 两类轮足机器人，以及 WH044X 四轮转向底盘；M20 和 ZB02W 均提供平地、粗糙地形两套入口。
+`mujoco_sim` 用于把训练得到的 ONNX 运动策略部署到 MuJoCo，并通过 Xbox 类手柄实时控制机器人。当前包含 M20、ZB02W 两类轮足机器人，以及 WH044X 四轮转向底盘；M20 和 ZB02W 均提供平地、粗糙地形入口，ZB02W 还提供启用轮子静止 PID 的 student 策略入口。
 
 仿真启动时会把机器人模型、弹丸模型以及可选地形合并成 `tmp_merged.xml`，随后以 MuJoCo 仿真步长运行。控制器每隔 `control_decimation` 个仿真步更新一次；当前入口的控制周期均为 20 ms（50 Hz）。
 
@@ -12,6 +12,7 @@
 | `m20_rough` | M20 / 台阶地形 | `configs/m20_rough.yaml` | RNN ONNX 策略；额外合并 `rough_stairs.xml` |
 | `zb02w_flat` | ZB02W / 平地 | `configs/zb02w_flat.yaml` | RNN ONNX 策略；腿位置 PD + 轮速度 PD |
 | `zb02w_rough` | ZB02W / 台阶地形 | `configs/zb02w_rough.yaml` | RNN ONNX 策略；额外合并 `rough_stairs.xml` |
+| `zb02w_ts` | ZB02W / 台阶地形 | `configs/zb02w_ts.yaml` | student RNN ONNX 策略；启用轮子静止 PID |
 | `wh044x` | WH044X / 平地 | `configs/wh044x.yaml` | C++ `chassis` 运动学解算；直接写入转向和轮速 actuator control |
 
 `configs/m20.yaml` 是未被现有入口引用的旧配置，不应直接替代 `m20_flat.yaml`。
@@ -64,6 +65,7 @@ python mujoco_sim/run_script.py --filename=m20_rough
 # ZB02W
 python mujoco_sim/run_script.py --filename=zb02w_flat
 python mujoco_sim/run_script.py --filename=zb02w_rough
+python mujoco_sim/run_script.py --filename=zb02w_ts
 
 # WH044X（需要外部模型和 chassis 扩展）
 python mujoco_sim/run_script.py --filename=wh044x
@@ -115,6 +117,38 @@ run_script.py
 - `MujocoDeployWl`：使用 ONNX Runtime 的 CPU provider 推理，支持普通策略和带 `h_in/c_in` 的 RNN 策略，并把 16 维动作拆分为 12 个腿关节位置目标和 4 个轮关节速度目标。
 - `MujocoDeployWh`：轻量扩展点；WH044X 的底盘模式切换和运动学控制实现在 `scripts/wh044x.py`。
 
+## 轮子静止 PID
+
+RL 策略在停车时仍可能输出很小的非零轮速，单靠轮速度 PD 难以使轮子绝对静止。`MujocoDeployWl` 因此提供可选的停车 PID：保留策略原始轮速目标，并在接近静止时为每个轮子叠加一个以实际轮速为反馈的修正量。该修正是**目标轮速修正**，不是直接施加到 actuator 的力矩；修正后的目标仍由原有轮速度 PD 转换为力矩。
+
+PID 仅在以下条件同时满足时激活：
+
+1. `wheel_stop_pid_enabled` 为 `true`；
+2. 三维速度指令满足 `norm(cmd) < 1e-3`；
+3. 轮组实际转速满足 `abs(mean(wheel_velocity)) < 2.0`。
+
+对每个轮子，目标静止速度为 0，因此误差为 `error = -wheel_velocity`。控制器使用 `ctrl_dt = simulation_dt * control_decimation` 计算积分项和微分项，并按以下方式修正策略目标：
+
+```text
+pid_output = clip(kp * error + ki * integral(error) + kd * derivative(error),
+                  -output_limit, output_limit)
+target_wheel_velocity = policy_target_wheel_velocity + pid_output
+```
+
+PID 输出带有限幅和抗积分饱和：当输出已经饱和且当前误差会让其进一步饱和时，暂停积分累积。首次激活时会把历史误差初始化为当前误差，避免微分项产生突变；PID 退出或仿真重置时，会清空积分、历史误差和激活状态。速度指令非零或轮组速度尚高时，轮速目标完全由策略输出决定。
+
+当前 `zb02w_ts.yaml` 已启用该功能，参数为：
+
+```yaml
+wheel_stop_pid_enabled: true
+wheel_stop_pid_kp: 1.0
+wheel_stop_pid_ki: 7.0
+wheel_stop_pid_kd: 0.00005
+wheel_stop_pid_output_limit: 20.0
+```
+
+其余现有 M20 / ZB02W 配置默认关闭停车 PID。调参时建议先限制 `wheel_stop_pid_output_limit`，再依次调整 `kp`、`ki` 和 `kd`，并观察停车阶段的各轮速度及目标轮速，避免振荡或积分累积过快。当前代码中的 `wheel_action_vel_deadzone` 仅被读取，相关死区处理已注释，因此该字段不会使策略轮速自动归零。
+
 ## 配置要点
 
 | 字段 | 作用 |
@@ -131,6 +165,9 @@ run_script.py
 | `action_scale_pos`, `action_scale_vel` | 策略动作到目标位置 / 速度的缩放 |
 | `cmd_range`, `cmd_deadzone` | 手柄速度范围与死区 |
 | `max_command_rate` | M20 / ZB02W 指令变化率上限 |
+| `wheel_stop_pid_enabled` | 是否启用接近静止时的轮速 PID 修正；未配置时为 `false` |
+| `wheel_stop_pid_kp`, `wheel_stop_pid_ki`, `wheel_stop_pid_kd` | 轮子静止 PID 的比例、积分和微分增益；未配置时为 `0.0` |
+| `wheel_stop_pid_output_limit` | 单个轮子的 PID 目标轮速修正绝对值上限，必须大于 0；未配置时为 `5.0` |
 | `is_rnn` | 是否按 RNN 接口传入并维护隐藏状态 |
 
 部署时，观测的顺序、缩放、关节排列和动作缩放必须与训练端完全一致；修改这些字段前应同时核对训练配置和导出的 ONNX 输入 / 输出。
@@ -150,6 +187,7 @@ mujoco_sim/
 │   ├── m20_rough.py
 │   ├── zb02w_flat.py
 │   ├── zb02w_rough.py
+│   ├── zb02w_ts.py
 │   └── wh044x.py
 ├── robots/
 │   ├── M20_mjcf/              # M20 模型与 mesh

@@ -133,12 +133,14 @@ class MujocoDeployWl(MujocoDeploy):
             self.action[:self.num_actions_pos] * self.action_scale_pos + self.default_angles
         )
         self.targ_dof_vel = self.action[self.num_actions_pos:] * self.action_scale_vel
-        self.targ_dof_vel = np.sign(self.targ_dof_vel) * np.maximum(
-            np.abs(self.targ_dof_vel) - self.wheel_action_vel_deadzone,
-            0.0,
-        )
+        # self.targ_dof_vel = np.sign(self.targ_dof_vel) * np.maximum(
+        #     np.abs(self.targ_dof_vel) - self.wheel_action_vel_deadzone,
+        #     0.0,
+        # )
 
-        if self.wheel_stop_pid_enabled and np.linalg.norm(self.cmd) < 1e-3:
+        dqj_wheel = self.data.qvel[6:][self.wheel_joint_idx]
+        plotjuggler.send_data("wheel_vel", dqj_wheel)
+        if self.wheel_stop_pid_enabled and np.linalg.norm(self.cmd) < 1e-3 and np.abs(np.mean(dqj_wheel)) < 2.0:
             wheel_velocity = self.data.qvel[6:][self.wheel_joint_idx]
             wheel_velocity_error = -np.asarray(wheel_velocity, dtype=np.float32)
             if not self.wheel_stop_pid_active:
@@ -156,7 +158,6 @@ class MujocoDeployWl(MujocoDeploy):
                     self.wheel_stop_pid_output_limit,
                 )
             )
-            pid_output *= (np.sign(self.targ_dof_vel) != np.sign(pid_output)) # pid用于抵抗蠕行,不允许pid输出与目标速度同向，避免pid加剧rl动作
             self.targ_dof_vel += pid_output
             self.wheel_stop_pid_active = True
             # print(f"pid_output: {pid_output}")
