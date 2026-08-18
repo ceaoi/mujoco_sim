@@ -1,5 +1,5 @@
 policy_path: "{mujoco_workspace_dir}/../logs/m20_terrain/exported/policies/onnx/policy.onnx"
-xml_path: "{mujoco_workspace_dir}/robots/M20_mjcf/mjcf/M20.xml"
+xml_path: "{mujoco_workspace_dir}/assets/robots/M20_mjcf/mjcf/M20.xml"
 
 # Simulation time step
 simulation_dt: 0.001

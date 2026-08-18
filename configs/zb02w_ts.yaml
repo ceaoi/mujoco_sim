@@ -1,6 +1,6 @@
 policy_path: "{mujoco_workspace_dir}/../logs/rsl_rl/zb02w_student/1_exported/policy.onnx"
 xml_path: "{mujoco_workspace_dir}/../source/manager_based/locomotion/assets/robots/zb02w/mjcf/mjcf/zb02w.xml"
-terrain_xml_path: "{mujoco_workspace_dir}/robots/terrains/rough_stairs.xml"
+terrain_xml_path: "{mujoco_workspace_dir}/assets/terrains/rough_stairs.xml"
 
 # Simulation time step
 simulation_dt: 0.0005

@@ -77,7 +77,7 @@ class MujocoDeploy:
         self.cmd_deadzone = np.array(config["cmd_deadzone"], dtype=np.float32)
         self.cmd = np.array(config.get("cmd_init", [0.0, 0.0, 0.0]), dtype=np.float32)
 
-        ball_xml_path = f"{self.mujoco_workspace_dir}/robots/ball/ball.xml"
+        ball_xml_path = f"{self.mujoco_workspace_dir}/assets/ball/ball.xml"
 
         terrain_xml_path = config.get("terrain_xml_path")
         if terrain_xml_path is not None:

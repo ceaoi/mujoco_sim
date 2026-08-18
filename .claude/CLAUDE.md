@@ -20,7 +20,7 @@ mujoco_sim/
 ├── base_wh.py            # MujocoDeployWh → 半人形底盘：轻量基类（控制逻辑在叶子脚本）
 ├── run_script.py          # 入口脚本
 ├── scripts/               # 部署脚本
-│   ├── m20_flat.py        # M20 平地部署，含 GaitGenerator
+│   ├── m20_flat.py        # M20 平地部署，含 GaitPhaseGenerator
 │   └── wh044x.py          # WH044X 部署，C++ 底盘运动学解算 + 直接设置 qpos/qvel
 ├── configs/               # YAML 配置
 │   ├── m20_flat.yaml      # M20 RNN 策略, sim_dt=0.0005, decimation=40 → 50Hz

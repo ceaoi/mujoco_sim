@@ -7,7 +7,7 @@ import numpy as np
 import yaml
 
 
-class GaitGenerator:
+class GaitPhaseGenerator:
     """Single-env gait generator for MuJoCo deployment.
 
     Mirrors the logic of IsaacLab `GaitStateCommand` and outputs
@@ -15,18 +15,18 @@ class GaitGenerator:
     """
 
     def __init__(self, yaml_path: str):
-        yaml_path = Path(yaml_path)
+        yaml_path = Path(yaml_path) # type: ignore
         with yaml_path.open("r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
 
-        self.gait_freq = float(cfg.get("gait_freq", 2.0))
-        self.no_constraint_lin_acc_threshold = float(cfg.get("no_constraint_lin_acc_threshold", 4.0))
-        self.stop_hold_time_factor = float(cfg.get("stop_hold_time_factor", 1.5))
-        self.switch_threshold = float(cfg["switch_threshold"])
+        self.gait_freq = float(cfg.get("gait_freq", 2.0)) # type: ignore
+        self.no_constraint_lin_acc_threshold = float(cfg.get("no_constraint_lin_acc_threshold", 4.0)) # type: ignore
+        self.stop_hold_time_factor = float(cfg.get("stop_hold_time_factor", 1.5)) # type: ignore
+        self.switch_threshold = float(cfg["switch_threshold"]) # type: ignore
 
-        self.gait_offset_leftward = np.asarray(cfg.get("gait_offset_leftward", [0.0, 0.5, 0.5, 0.0]), dtype=np.float32)
-        self.gait_offset_rightward = np.asarray(cfg.get("gait_offset_rightward", [0.5, 0.0, 0.0, 0.5]), dtype=np.float32)
-        self._dt = np.asarray(cfg["control_decimation"] * cfg["simulation_dt"], dtype=np.float32)
+        self.gait_offset_leftward = np.asarray(cfg.get("gait_offset_leftward", [0.0, 0.5, 0.5, 0.0]), dtype=np.float32) # type: ignore
+        self.gait_offset_rightward = np.asarray(cfg.get("gait_offset_rightward", [0.5, 0.0, 0.0, 0.5]), dtype=np.float32) # type: ignore
+        self._dt = np.asarray(cfg["control_decimation"] * cfg["simulation_dt"], dtype=np.float32) # type: ignore
         self.reset()
 
     def reset(self) -> None:
