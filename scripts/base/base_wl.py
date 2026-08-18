@@ -18,18 +18,15 @@ def wheel_stop_pid(error, integral, previous_error, kp, ki, kd, dt, output_limit
     candidate_integral = integral + error * np.float32(dt)
     unsaturated_output = kp * error + ki * candidate_integral + kd * derivative
 
-    if ki > 0.0:
-        drives_further_into_saturation = np.logical_or(
-            np.logical_and(unsaturated_output > output_limit, error > 0.0),
-            np.logical_and(unsaturated_output < -output_limit, error < 0.0),
-        )
-        new_integral = np.where(
-            drives_further_into_saturation,
-            integral,
-            candidate_integral,
-        )
-    else:
-        new_integral = integral.copy()
+    drives_further_into_saturation = np.logical_or(
+        np.logical_and(unsaturated_output > output_limit, error > 0.0),
+        np.logical_and(unsaturated_output < -output_limit, error < 0.0),
+    )
+    new_integral = np.where(
+        drives_further_into_saturation,
+        integral,
+        candidate_integral,
+    )
 
     output = kp * error + ki * new_integral + kd * derivative
     output = np.clip(output, -output_limit, output_limit).astype(np.float32, copy=False)
