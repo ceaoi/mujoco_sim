@@ -1,5 +1,9 @@
 import os
 import time
+import warnings
+from dataclasses import replace
+from importlib import import_module
+from typing import Any
 
 import mujoco
 import mujoco.viewer
@@ -60,6 +64,7 @@ class MujocoDeploy:
     def __init__(self, config: MujocoSimConfig, device="cpu"):
         self.config = config
         self.device = device
+        self._init_plotjuggler()
 
         self.control_decimation = config.control_decimation
         self.sim_dt = config.simulation_dt
@@ -114,6 +119,40 @@ class MujocoDeploy:
         self.prev_a_pressed = False
 
         self._init_control()
+
+    # ---- optional telemetry ----
+
+    def _init_plotjuggler(self) -> None:
+        self.plotjuggler_enabled = bool(self.config.plotjuggler_enabled)
+        self.plotjuggler = None
+        if not self.plotjuggler_enabled:
+            return
+
+        try:
+            data_vis = import_module("data_vis")
+            self.plotjuggler = data_vis.PlotJugglerUDP("127.0.0.1", 5005)
+        except Exception as exc:
+            self._disable_plotjuggler("initialization failed", exc)
+
+    def _disable_plotjuggler(self, reason: str, exc: Exception) -> None:
+        self.plotjuggler_enabled = False
+        self.plotjuggler = None
+        if self.config.plotjuggler_enabled:
+            self.config = replace(self.config, plotjuggler_enabled=False)
+        warnings.warn(
+            f"PlotJuggler {reason}; telemetry disabled: {type(exc).__name__}: {exc}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
+    def send_plotjuggler_data(self, name: str, value: Any) -> None:
+        if not self.plotjuggler_enabled or self.plotjuggler is None:
+            return
+
+        try:
+            self.plotjuggler.send_data(name, value)
+        except Exception as exc:
+            self._disable_plotjuggler("send failed", exc)
 
     # ---- hooks (subclass overrides) ----
 

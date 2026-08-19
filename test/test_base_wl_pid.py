@@ -28,6 +28,8 @@ class _FakePolicy:
 
 def _make_deploy(action, cmd, wheel_velocity, kp=1.0, ki=0.0, kd=0.0):
     deploy = object.__new__(MujocoDeployWl)
+    deploy.plotjuggler_enabled = False
+    deploy.plotjuggler = None
     deploy.model_in = np.zeros(1, dtype=np.float32)
     deploy.is_rnn = False
     deploy.policy = _FakePolicy(action)

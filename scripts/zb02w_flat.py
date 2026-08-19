@@ -3,8 +3,6 @@ from mujoco_sim.scripts.base.base_wl import MujocoDeployWl
 from mujoco_sim.utils.gait_phase_generator import GaitPhaseGenerator
 from mujoco_sim.utils.deploy_func import quat_rotate_inverse, pd_ctrl
 import numpy as np
-from data_vis import PlotJugglerUDP
-pj = PlotJugglerUDP()
 
 class Zb02wFlatDeploy(MujocoDeployWl):
 
@@ -29,9 +27,9 @@ class Zb02wFlatDeploy(MujocoDeployWl):
             self.kpsVel,
             self.kdsVel,
         )
-        pj.send_data("targ_pos", self.targ_dof_pos)
-        pj.send_data("targ_vel", self.targ_dof_vel)
-        pj.send_data("tau", self.tau)
+        self.send_plotjuggler_data("targ_pos", self.targ_dof_pos)
+        self.send_plotjuggler_data("targ_vel", self.targ_dof_vel)
+        self.send_plotjuggler_data("tau", self.tau)
 
     def update_model_in(self):
         self.model_in = self.obs
@@ -80,8 +78,8 @@ class Zb02wFlatDeploy(MujocoDeployWl):
         # encoder obs term 7: velocity_commands (raw generated command)
         self.obs[offset:offset + 3] = self.cmd
         offset += 3
-        pj.send_array("cmd", self.cmd)
-        pj.send_array("obs", self.obs)
+        self.send_plotjuggler_data("cmd", self.cmd)
+        self.send_plotjuggler_data("obs", self.obs)
 
 if __name__ == "__main__":
     deploy = Zb02wFlatDeploy(Zb02wFlatConfig())

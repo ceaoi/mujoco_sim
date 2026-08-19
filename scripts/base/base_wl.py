@@ -5,9 +5,6 @@ from mujoco_sim.configs import WheelLeggedConfig
 from .base import MujocoDeploy
 from mujoco_sim.utils.deploy_func import pd_ctrl
 
-from data_vis import PlotJugglerUDP
-plotjuggler = PlotJugglerUDP("localhost", 5005)
-
 
 def wheel_stop_pid(error, integral, previous_error, kp, ki, kd, dt, output_limit):
     """Compute a vectorized wheel-speed PID correction with anti-windup."""
@@ -133,7 +130,7 @@ class MujocoDeployWl(MujocoDeploy):
             action = self.policy.run([self.policy_output_name], {self.policy_input_name: inp})[0]
             self.action = np.asarray(action, dtype=np.float32).squeeze()
 
-        plotjuggler.send_data("actions", self.action)
+        self.send_plotjuggler_data("actions", self.action)
         self.targ_dof_pos = (
             self.action[:self.num_actions_pos] * self.action_scale_pos + self.default_angles
         )
@@ -144,7 +141,7 @@ class MujocoDeployWl(MujocoDeploy):
         # )
 
         dqj_wheel = self.data.qvel[6:][self.wheel_joint_idx]
-        plotjuggler.send_data("wheel_vel", dqj_wheel)
+        self.send_plotjuggler_data("wheel_vel", dqj_wheel)
         if self.wheel_stop_pid_enabled and np.linalg.norm(self.cmd) < 1e-3 and np.abs(np.mean(dqj_wheel)) < 2.0:
             wheel_velocity = self.data.qvel[6:][self.wheel_joint_idx]
             wheel_velocity_error = -np.asarray(wheel_velocity, dtype=np.float32)

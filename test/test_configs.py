@@ -59,6 +59,9 @@ def test_zb02w_rough_and_student_configs_inherit_expected_values():
     assert student.wheel_stop_pid_enabled
     assert student.wheel_stop_pid_ki == 2.0
     assert student.wheel_stop_pid_output_limit == 20.0
+    assert flat.plotjuggler_enabled
+    assert rough.plotjuggler_enabled
+    assert student.plotjuggler_enabled
 
 
 def test_configs_use_absolute_paths_immutable_sequences_and_frozen_instances():
@@ -87,6 +90,7 @@ def test_wh044x_config_keeps_chassis_specific_paths_and_dimensions():
     assert config.simulation_dt == 0.001
     assert config.control_decimation == 20
     assert config.num_actions == 8
+    assert not config.plotjuggler_enabled
 
 
 def test_gait_phase_generator_reads_m20_config_object():

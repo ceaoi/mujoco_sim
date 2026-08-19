@@ -47,7 +47,7 @@ pip install -r mujoco_sim/requirements.txt
 
 基础依赖包括 `mujoco>=3.9.0`、`numpy`、`onnxruntime` 和 `pygame`。MuJoCo 3.9 提供左上角 Base 状态 HUD 使用的 viewer 文本接口。此外还需要准备：
 
-- M20 / ZB02W：安装 [`data_vis`](https://github.com/ceaoi/data_vis)；当前轮足基类和入口会直接导入 `PlotJugglerUDP`，即使不打开 PlotJuggler 也必须能导入该 Python 包。
+- PlotJuggler 遥测（可选）：需要发送调试数据时安装 [`data_vis`](https://github.com/ceaoi/data_vis)。未开启遥测时不会导入该包；开启但包或 UDP socket 不可用时会告警并自动关闭遥测，不影响仿真继续运行。
 - WH044X：编译可被 Python 导入的 `chassis` 扩展，并更新 `chassis_build_dir`。
 - MuJoCo viewer 需要图形显示环境；手柄默认按 Linux 下常见的 Xbox 类控制器映射读取。
 
@@ -126,9 +126,21 @@ run_script.py
 
 类的职责如下：
 
-- `MujocoDeploy`：接收 `MujocoSimConfig` 配置对象、合并 XML、创建 MuJoCo model/data、处理手柄、相机、重置和弹丸，并维护实时仿真循环。
+- `MujocoDeploy`：接收 `MujocoSimConfig` 配置对象，统一管理可选 PlotJuggler 发送器，并负责合并 XML、创建 MuJoCo model/data、处理手柄、相机、重置、弹丸和实时仿真循环。
 - `MujocoDeployWl`：使用 ONNX Runtime 的 CPU provider 推理，支持普通策略和带 `h_in/c_in` 的 RNN 策略，并把 16 维动作拆分为 12 个腿关节位置目标和 4 个轮关节速度目标。
 - `MujocoDeployWh`：轻量扩展点；WH044X 的底盘模式切换和运动学控制实现在 `scripts/wh044x.py`。
+
+## PlotJuggler 遥测
+
+轮足配置默认设置 `plotjuggler_enabled=True`，使用单个 `PlotJugglerUDP("127.0.0.1", 5005)` 发送 `actions`、`wheel_vel`、`cmd`、`obs`、`targ_pos`、`targ_vel` 和 `tau`。WH044X 与通用配置默认关闭。
+
+不需要遥测或未安装 `data_vis` 时，可显式关闭：
+
+```python
+config = M20FlatConfig(plotjuggler_enabled=False)
+```
+
+关闭状态不会导入 `data_vis`。如果启用后导入、创建发送器或发送数据失败，`MujocoDeploy` 会发出一次 warning，将运行时开关以及 `self.config.plotjuggler_enabled` 更新为 `False`，随后停止发送但保持控制和仿真运行。
 
 ## 轮子静止 PID
 
@@ -188,6 +200,7 @@ Rough 和 TS 配置继承对应机器人的 Flat 配置，只声明有差异的�
 | `policy_path` | M20 / ZB02W 的 ONNX 策略路径 |
 | `xml_path` | 机器人 MJCF 路径 |
 | `terrain_xml_path` | 可选地形 MJCF；rough 配置使用 |
+| `plotjuggler_enabled` | 是否启用可选 PlotJuggler UDP 遥测；轮足配置默认开启，其他配置默认关闭 |
 | `num_obs`, `num_obs_hist`, `num_actions` | 策略观测、历史和动作维度 |
 | `leg_joint_idx`, `wheel_joint_idx` | MuJoCo state 中的腿 / 轮关节索引 |
 | `leg_actions_to_mujoco`, `wheel_actions_to_mujoco` | 策略动作到 MuJoCo actuator 的映射 |

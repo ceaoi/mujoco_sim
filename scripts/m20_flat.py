@@ -3,8 +3,6 @@ from mujoco_sim.scripts.base.base_wl import MujocoDeployWl
 from mujoco_sim.utils.gait_phase_generator import GaitPhaseGenerator
 from mujoco_sim.utils.deploy_func import quat_rotate_inverse
 import numpy as np
-from data_vis import PlotJugglerUDP
-pj = PlotJugglerUDP()
 
 class M20FlatDeploy(MujocoDeployWl):
 
@@ -67,8 +65,8 @@ class M20FlatDeploy(MujocoDeployWl):
         # encoder obs term 7: velocity_commands (raw generated command)
         self.obs[offset:offset + 3] = self.cmd
         offset += 3
-        pj.send_array("cmd", self.cmd)
-        pj.send_array("obs", self.obs)
+        self.send_plotjuggler_data("cmd", self.cmd)
+        self.send_plotjuggler_data("obs", self.obs)
 
         # gait_state = self.gait._update_gait(self.cmd, float(base_lin_acc_body[1]))
         # self.obs[offset:offset + 5] = gait_state

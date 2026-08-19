@@ -23,6 +23,7 @@ class MujocoSimConfig:
     cmd_deadzone: FloatTuple
     cmd_init: FloatTuple = (0.0, 0.0, 0.0)
     terrain_xml_path: Path | None = None
+    plotjuggler_enabled: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -51,3 +52,4 @@ class WheelLeggedConfig(MujocoSimConfig):
     wheel_stop_pid_kd: float = 0.0
     wheel_stop_pid_output_limit: float = 5.0
     is_rnn: bool = False
+    plotjuggler_enabled: bool = True
