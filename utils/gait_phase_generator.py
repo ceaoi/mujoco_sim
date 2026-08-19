@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
 
 import numpy as np
-import yaml
+
+from mujoco_sim.configs import M20FlatConfig
 
 
 class GaitPhaseGenerator:
@@ -14,19 +14,18 @@ class GaitPhaseGenerator:
     `[phase, clock_fl, clock_fr, clock_hl, clock_hr]`.
     """
 
-    def __init__(self, yaml_path: str):
-        yaml_path = Path(yaml_path) # type: ignore
-        with yaml_path.open("r", encoding="utf-8") as f:
-            cfg = yaml.safe_load(f)
+    def __init__(self, config: M20FlatConfig):
+        self.gait_freq = float(config.gait_freq)
+        self.no_constraint_lin_acc_threshold = float(config.no_constraint_lin_acc_threshold)
+        self.stop_hold_time_factor = float(config.stop_hold_time_factor)
+        self.switch_threshold = float(config.switch_threshold)
 
-        self.gait_freq = float(cfg.get("gait_freq", 2.0)) # type: ignore
-        self.no_constraint_lin_acc_threshold = float(cfg.get("no_constraint_lin_acc_threshold", 4.0)) # type: ignore
-        self.stop_hold_time_factor = float(cfg.get("stop_hold_time_factor", 1.5)) # type: ignore
-        self.switch_threshold = float(cfg["switch_threshold"]) # type: ignore
-
-        self.gait_offset_leftward = np.asarray(cfg.get("gait_offset_leftward", [0.0, 0.5, 0.5, 0.0]), dtype=np.float32) # type: ignore
-        self.gait_offset_rightward = np.asarray(cfg.get("gait_offset_rightward", [0.5, 0.0, 0.0, 0.5]), dtype=np.float32) # type: ignore
-        self._dt = np.asarray(cfg["control_decimation"] * cfg["simulation_dt"], dtype=np.float32) # type: ignore
+        self.gait_offset_leftward = np.asarray(config.gait_offset_leftward, dtype=np.float32)
+        self.gait_offset_rightward = np.asarray(config.gait_offset_rightward, dtype=np.float32)
+        self._dt = np.asarray(
+            config.control_decimation * config.simulation_dt,
+            dtype=np.float32,
+        )
         self.reset()
 
     def reset(self) -> None:

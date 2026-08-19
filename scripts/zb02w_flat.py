@@ -1,3 +1,4 @@
+from mujoco_sim.configs import Zb02wFlatConfig
 from mujoco_sim.scripts.base.base_wl import MujocoDeployWl
 from mujoco_sim.utils.gait_phase_generator import GaitPhaseGenerator
 from mujoco_sim.utils.deploy_func import quat_rotate_inverse, pd_ctrl
@@ -5,13 +6,11 @@ import numpy as np
 from data_vis import PlotJugglerUDP
 pj = PlotJugglerUDP()
 
-yaml_filename = "zb02w_flat.yaml"
-
 class Zb02wFlatDeploy(MujocoDeployWl):
 
-    def __init__(self, yaml_filename, device="cpu"):
-        super().__init__(yaml_filename, device)
-        self.max_delta_cmd = np.array(self.config["max_command_rate"], dtype=np.float32) * self.ctrl_dt # type: ignore
+    def __init__(self, config: Zb02wFlatConfig, device="cpu"):
+        super().__init__(config, device)
+        self.max_delta_cmd = np.array(config.max_command_rate, dtype=np.float32) * self.ctrl_dt
 
     def reset(self):
         super().reset()
@@ -85,5 +84,5 @@ class Zb02wFlatDeploy(MujocoDeployWl):
         pj.send_array("obs", self.obs)
 
 if __name__ == "__main__":
-    deploy = Zb02wFlatDeploy(yaml_filename)
+    deploy = Zb02wFlatDeploy(Zb02wFlatConfig())
     deploy.run()

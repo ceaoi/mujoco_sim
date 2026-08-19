@@ -22,10 +22,11 @@ mujoco_sim/
 ├── scripts/               # 部署脚本
 │   ├── m20_flat.py        # M20 平地部署，含 GaitPhaseGenerator
 │   └── wh044x.py          # WH044X 部署，C++ 底盘运动学解算 + 直接设置 qpos/qvel
-├── configs/               # YAML 配置
-│   ├── m20_flat.yaml      # M20 RNN 策略, sim_dt=0.0005, decimation=40 → 50Hz
-│   ├── m20.yaml           # M20 MLP 策略, sim_dt=0.001, decimation=20 → 50Hz
-│   └── wh044x.yaml        # WH044X 配置, xml_path + chassis_build_dir
+├── configs/               # Python dataclass 配置
+│   ├── base.py            # MujocoSimConfig / WheelLeggedConfig
+│   ├── m20.py             # M20FlatConfig → M20RoughConfig
+│   ├── zb02w.py           # Zb02wFlatConfig → Rough → TS
+│   └── wh044x.py          # Wh044xConfig
 ├── utils/
 │   ├── deploy_func.py     # quat_rotate / quat_rotate_inverse / pd_ctrl
 │   ├── gait_generator.py  # 步态相位/时钟生成（匹配 IsaacLab GaitStateCommand）
@@ -48,7 +49,7 @@ MujocoDeploy (base.py)              ← 通用：仿真循环、手柄、相机�
 ```
 
 **`MujocoDeploy` (base.py)** 通用基类：
-- `__init__`: 加载 YAML → 构建 MuJoCo 模型（合并 robot XML + ball XML）→ 初始化手柄 → 调用 `_init_control()` hook
+- `__init__`: 接收配置对象 → 构建 MuJoCo 模型（合并 robot XML + ball XML）→ 初始化手柄 → 调用 `_init_control()` hook
 - `run()`: 主循环，以 `sim_dt` 步进，每 `control_decimation` 步调用一次控制更新
 - `step()`: update_cmd → update_obs → update_model_in → update_action → update_tau → mj_step
 - `update_cmd()`: 手柄摇杆 → cmd（含死区）
@@ -77,7 +78,7 @@ WH044X 额外：C++ chassis 库（`chassis_build_dir` 指向的 build 目录）
 
 ## 添加新部署脚本
 
-1. 在 `configs/` 添加 YAML 配置
-2. 在 `scripts/` 创建 `xxx.py`，继承对应基类（`MujocoDeploy` / `MujocoDeployWl` / `MujocoDeployWh`）
+1. 在 `configs/` 继承对应机器人的 Flat 配置类并覆盖差异字段
+2. 在 `scripts/` 创建 `xxx.py`，实例化配置并传给对应基类（`MujocoDeploy` / `MujocoDeployWl` / `MujocoDeployWh`）
 3. 根据需求实现 `update_obs()`, `update_model_in()`, `update_action()`, `update_tau()` 等
 4. 运行 `python ./run_script.py --filename=xxx`

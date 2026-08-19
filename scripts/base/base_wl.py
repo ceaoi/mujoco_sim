@@ -1,6 +1,7 @@
 import numpy as np
 import onnxruntime as ort
 
+from mujoco_sim.configs import WheelLeggedConfig
 from .base import MujocoDeploy
 from mujoco_sim.utils.deploy_func import pd_ctrl
 
@@ -35,36 +36,43 @@ def wheel_stop_pid(error, integral, previous_error, kp, ki, kd, dt, output_limit
 
 class MujocoDeployWl(MujocoDeploy):
 
+    def __init__(self, config: WheelLeggedConfig, device="cpu"):
+        super().__init__(config, device)
+
     def _init_control(self):
         config = self.config
 
-        self.leg_joint_idx = config["leg_joint_idx"]
-        self.leg_joint_idxx = config["leg_joint_idxx"]
-        self.wheel_joint_idx = config["wheel_joint_idx"]
-        self.leg_actions_to_mujoco = config["leg_actions_to_mujoco"]
-        self.wheel_actions_to_mujoco = config["wheel_actions_to_mujoco"]
-
-        self.kpsPos = np.array(config["kpsPos"], dtype=np.float32)
-        self.kdsPos = np.array(config["kdsPos"], dtype=np.float32)
-        self.kpsVel = np.array(config["kpsVel"], dtype=np.float32)
-        self.kdsVel = np.array(config["kdsVel"], dtype=np.float32)
-
-        self.default_angles = np.array(config["default_angles_leg"], dtype=np.float32)
-        self.action_scale_pos = np.float32(config["action_scale_pos"])
-        self.action_scale_vel = np.float32(config["action_scale_vel"])
-        self.wheel_action_vel_deadzone = np.float32(config["wheel_action_vel_deadzone"])
-        self.wheel_stop_pid_enabled = bool(config.get("wheel_stop_pid_enabled", False))
-        self.wheel_stop_pid_kp = np.float32(config.get("wheel_stop_pid_kp", 0.0))
-        self.wheel_stop_pid_ki = np.float32(config.get("wheel_stop_pid_ki", 0.0))
-        self.wheel_stop_pid_kd = np.float32(config.get("wheel_stop_pid_kd", 0.0))
-        self.wheel_stop_pid_output_limit = np.float32(
-            config.get("wheel_stop_pid_output_limit", 5.0)
+        self.leg_joint_idx = np.asarray(config.leg_joint_idx, dtype=np.intp)
+        self.leg_joint_idxx = np.asarray(config.leg_joint_idxx, dtype=np.intp)
+        self.wheel_joint_idx = np.asarray(config.wheel_joint_idx, dtype=np.intp)
+        self.leg_actions_to_mujoco = np.asarray(
+            config.leg_actions_to_mujoco,
+            dtype=np.intp,
         )
+        self.wheel_actions_to_mujoco = np.asarray(
+            config.wheel_actions_to_mujoco,
+            dtype=np.intp,
+        )
+
+        self.kpsPos = np.array(config.kpsPos, dtype=np.float32)
+        self.kdsPos = np.array(config.kdsPos, dtype=np.float32)
+        self.kpsVel = np.array(config.kpsVel, dtype=np.float32)
+        self.kdsVel = np.array(config.kdsVel, dtype=np.float32)
+
+        self.default_angles = np.array(config.default_angles_leg, dtype=np.float32)
+        self.action_scale_pos = np.float32(config.action_scale_pos)
+        self.action_scale_vel = np.float32(config.action_scale_vel)
+        self.wheel_action_vel_deadzone = np.float32(config.wheel_action_vel_deadzone)
+        self.wheel_stop_pid_enabled = bool(config.wheel_stop_pid_enabled)
+        self.wheel_stop_pid_kp = np.float32(config.wheel_stop_pid_kp)
+        self.wheel_stop_pid_ki = np.float32(config.wheel_stop_pid_ki)
+        self.wheel_stop_pid_kd = np.float32(config.wheel_stop_pid_kd)
+        self.wheel_stop_pid_output_limit = np.float32(config.wheel_stop_pid_output_limit)
 
         if self.wheel_stop_pid_output_limit <= 0.0:
             raise ValueError("wheel_stop_pid_output_limit must be greater than zero")
 
-        self.num_actions_pos = int(config["num_actions_pos"])
+        self.num_actions_pos = int(config.num_actions_pos)
         self.num_wheels = len(self.wheel_joint_idx)
 
         self.targ_dof_pos = self.default_angles.copy()
@@ -73,9 +81,9 @@ class MujocoDeployWl(MujocoDeploy):
         self.wheel_stop_pid_previous_error = np.zeros(self.num_wheels, dtype=np.float32)
         self.wheel_stop_pid_active = False
 
-        policy_path = config["policy_path"].replace("{mujoco_workspace_dir}", self.mujoco_workspace_dir)
-        self.is_rnn = bool(config.get("is_rnn", False))
-        self.policy = self._make_onnx_session(policy_path)
+        policy_path = config.policy_path
+        self.is_rnn = bool(config.is_rnn)
+        self.policy = self._make_onnx_session(str(policy_path))
         print(f"[deploy_mujoco] Loaded ONNX policy: {policy_path}")
 
         self.policy_input_names = [x.name for x in self.policy.get_inputs()]

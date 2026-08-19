@@ -4,10 +4,10 @@ import time
 import mujoco
 import mujoco.viewer
 import numpy as np
-import yaml
 
 from pathlib import Path
 
+from mujoco_sim.configs import MujocoSimConfig
 from mujoco_sim.utils.gamepad_pygame import Gamepad
 from mujoco_sim.utils.projectile import ProjectileManager
 
@@ -57,33 +57,29 @@ class MujocoDeploy:
 
     mujoco_workspace_dir = str(Path(__file__).resolve().parents[2])
 
-    def __init__(self, yaml_filename, device="cpu"):
-        with open(f"{self.mujoco_workspace_dir}/configs/{yaml_filename}", "r") as f:
-            config: dict = yaml.load(f, Loader=yaml.FullLoader)  # type: ignore
-            xml_path = config["xml_path"].replace("{mujoco_workspace_dir}", self.mujoco_workspace_dir)
-
+    def __init__(self, config: MujocoSimConfig, device="cpu"):
         self.config = config
         self.device = device
 
-        self.control_decimation = config["control_decimation"]
-        self.sim_dt = config["simulation_dt"]
+        self.control_decimation = config.control_decimation
+        self.sim_dt = config.simulation_dt
 
-        self.num_obs = int(config["num_obs"])
-        self.num_actions = int(config["num_actions"])
-        self.num_obs_hist = int(config["num_obs_hist"])
+        self.num_obs = int(config.num_obs)
+        self.num_actions = int(config.num_actions)
+        self.num_obs_hist = int(config.num_obs_hist)
         self.obs_hist_dim = self.num_obs * self.num_obs_hist
 
-        self.cmd_range = np.array(config["cmd_range"], dtype=np.float32)
-        self.cmd_deadzone = np.array(config["cmd_deadzone"], dtype=np.float32)
-        self.cmd = np.array(config.get("cmd_init", [0.0, 0.0, 0.0]), dtype=np.float32)
+        self.cmd_range = np.array(config.cmd_range, dtype=np.float32)
+        self.cmd_deadzone = np.array(config.cmd_deadzone, dtype=np.float32)
+        self.cmd = np.array(config.cmd_init, dtype=np.float32)
 
         ball_xml_path = f"{self.mujoco_workspace_dir}/assets/ball/ball.xml"
 
-        terrain_xml_path = config.get("terrain_xml_path")
-        if terrain_xml_path is not None:
-            terrain_xml_path = terrain_xml_path.replace("{mujoco_workspace_dir}", self.mujoco_workspace_dir)
-
-        merged_xml_path = self._build_merged_xml(xml_path, ball_xml_path, terrain_xml_path)
+        merged_xml_path = self._build_merged_xml(
+            config.xml_path,
+            ball_xml_path,
+            config.terrain_xml_path,
+        )
         self.robot = mujoco.MjModel.from_xml_path(merged_xml_path)
         self.data = mujoco.MjData(self.robot)
         (
@@ -150,7 +146,7 @@ class MujocoDeploy:
         self.obs_hist[:] = 0.0
         self.action[:] = 0.0
         self.tau[:] = 0.0
-        self.cmd = np.array(self.config.get("cmd_init", [0.0, 0.0, 0.0]), dtype=np.float32)
+        self.cmd = np.array(self.config.cmd_init, dtype=np.float32)
 
         self.prev_l2_pressed = False
         self.prev_r2_pressed = False

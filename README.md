@@ -6,20 +6,18 @@
 
 ## 支持的入口
 
-| `--filename` | 机器人 / 场景 | 配置 | 控制方式 |
+| `--filename` | 机器人 / 场景 | 配置类 | 控制方式 |
 |---|---|---|---|
-| `m20_flat` | M20 / 平地 | `configs/m20_flat.yaml` | RNN ONNX 策略；腿位置 PD + 轮速度 PD |
-| `m20_rough` | M20 / 台阶地形 | `configs/m20_rough.yaml` | RNN ONNX 策略；额外合并 `rough_stairs.xml` |
-| `zb02w_flat` | ZB02W / 平地 | `configs/zb02w_flat.yaml` | RNN ONNX 策略；腿位置 PD + 轮速度 PD |
-| `zb02w_rough` | ZB02W / 台阶地形 | `configs/zb02w_rough.yaml` | RNN ONNX 策略；额外合并 `rough_stairs.xml` |
-| `zb02w_ts` | ZB02W / 台阶地形 | `configs/zb02w_ts.yaml` | student RNN ONNX 策略；启用轮子静止 PID |
-| `wh044x` | WH044X / 平地 | `configs/wh044x.yaml` | C++ `chassis` 运动学解算；直接写入转向和轮速 actuator control |
-
-`configs/m20.yaml` 是未被现有入口引用的旧配置，不应直接替代 `m20_flat.yaml`。
+| `m20_flat` | M20 / 平地 | `M20FlatConfig` | RNN ONNX 策略；腿位置 PD + 轮速度 PD |
+| `m20_rough` | M20 / 台阶地形 | `M20RoughConfig` | RNN ONNX 策略；额外合并 `rough_stairs.xml` |
+| `zb02w_flat` | ZB02W / 平地 | `Zb02wFlatConfig` | RNN ONNX 策略；腿位置 PD + 轮速度 PD |
+| `zb02w_rough` | ZB02W / 台阶地形 | `Zb02wRoughConfig` | RNN ONNX 策略；额外合并 `rough_stairs.xml` |
+| `zb02w_ts` | ZB02W / 台阶地形 | `Zb02wTsConfig` | student RNN ONNX 策略；启用轮子静止 PID |
+| `wh044x` | WH044X / 平地 | `Wh044xConfig` | C++ `chassis` 运动学解算；直接写入转向和轮速 actuator control |
 
 ## 工作区与外部资源
 
-配置中的 `{mujoco_workspace_dir}` 会在运行时展开为 `mujoco_sim` 的绝对路径。默认配置依赖如下工作区布局：
+配置类使用 `pathlib.Path` 根据 `mujoco_sim` 和项目根目录直接构造绝对路径。默认配置依赖如下工作区布局：
 
 ```text
 wl_lab/
@@ -33,9 +31,9 @@ wl_lab/
 - M20 的 MJCF 和 mesh 已包含在 `mujoco_sim/robots/M20_mjcf/`。
 - ZB02W 的 MJCF 默认从主工作区的 `source/` 目录读取。
 - M20、ZB02W 的 ONNX 策略默认从主工作区的 `logs/rsl_rl/` 读取。
-- WH044X 还要求 `configs/wh044x.yaml` 中的 `xml_path` 和 `chassis_build_dir` 指向有效资源。
+- WH044X 还要求 `Wh044xConfig` 中的 `xml_path` 和 `chassis_build_dir` 指向有效资源。
 
-如果本地目录不同，请在对应 YAML 中修改 `policy_path`、`xml_path`、`terrain_xml_path` 或 `chassis_build_dir`。机器人 XML 所在目录必须可写，因为启动时会在该目录生成临时的 `tmp_merged.xml`。
+如果本地目录不同，请继承对应配置类并覆盖 `policy_path`、`xml_path`、`terrain_xml_path` 或 `chassis_build_dir`。机器人 XML 所在目录必须可写，因为启动时会在该目录生成临时的 `tmp_merged.xml`。
 
 ## 安装
 
@@ -47,7 +45,7 @@ conda activate ms
 pip install -r mujoco_sim/requirements.txt
 ```
 
-基础依赖包括 `mujoco>=3.9.0`、`numpy`、`pyyaml`、`onnxruntime` 和 `pygame`。MuJoCo 3.9 提供左上角 Base 状态 HUD 使用的 viewer 文本接口。此外还需要准备：
+基础依赖包括 `mujoco>=3.9.0`、`numpy`、`onnxruntime` 和 `pygame`。MuJoCo 3.9 提供左上角 Base 状态 HUD 使用的 viewer 文本接口。此外还需要准备：
 
 - M20 / ZB02W：安装 [`data_vis`](https://github.com/ceaoi/data_vis)；当前轮足基类和入口会直接导入 `PlotJugglerUDP`，即使不打开 PlotJuggler 也必须能导入该 Python 包。
 - WH044X：编译可被 Python 导入的 `chassis` 扩展，并更新 `chassis_build_dir`。
@@ -75,7 +73,7 @@ python mujoco_sim/run_script.py --filename=wh044x
 
 ### 运行前检查
 
-1. 确认所选 YAML 中的模型、策略和地形路径存在。
+1. 确认所选配置类中的模型、策略和地形路径存在。
 2. 连接索引为 0 的手柄；未连接时仿真仍会尝试运行，但速度指令保持为零并持续输出警告。
 3. 如手柄映射不正确，先运行下面的诊断命令查看轴和按键：
 
@@ -85,7 +83,7 @@ python -m mujoco_sim.utils.gamepad_pygame --index 0 --hz 20
 
 ## Base 状态 HUD
 
-所有继承 `MujocoDeploy` 的入口都会在 MuJoCo 界面左上角显示 Base 状态，无需增加 YAML 配置。默认 Base 是合并模型中第一个 `<freejoint/>` 所属的 body；当前 M20、ZB02W 和 WH044X 均先合并机器人、再合并弹丸，因此会选择机器人 Base，而不是弹丸的 free joint。
+所有继承 `MujocoDeploy` 的入口都会在 MuJoCo 界面左上角显示 Base 状态，无需增加额外配置。默认 Base 是合并模型中第一个 `<freejoint/>` 所属的 body；当前 M20、ZB02W 和 WH044X 均先合并机器人、再合并弹丸，因此会选择机器人 Base，而不是弹丸的 free joint。
 
 HUD 以固定 20 Hz 刷新，数值保留三位小数；相机和 viewer 画面同步仍保持原有频率。当前 `simulation_dt=0.0005 s` 时，每 100 个仿真步更新一次 HUD。显示字段如下：
 
@@ -128,7 +126,7 @@ run_script.py
 
 类的职责如下：
 
-- `MujocoDeploy`：加载 YAML、合并 XML、创建 MuJoCo model/data、处理手柄、相机、重置和弹丸，并维护实时仿真循环。
+- `MujocoDeploy`：接收 `MujocoSimConfig` 配置对象、合并 XML、创建 MuJoCo model/data、处理手柄、相机、重置和弹丸，并维护实时仿真循环。
 - `MujocoDeployWl`：使用 ONNX Runtime 的 CPU provider 推理，支持普通策略和带 `h_in/c_in` 的 RNN 策略，并把 16 维动作拆分为 12 个腿关节位置目标和 4 个轮关节速度目标。
 - `MujocoDeployWh`：轻量扩展点；WH044X 的底盘模式切换和运动学控制实现在 `scripts/wh044x.py`。
 
@@ -152,19 +150,36 @@ target_wheel_velocity = policy_target_wheel_velocity + pid_output
 
 PID 输出带有限幅和抗积分饱和：当输出已经饱和且当前误差会让其进一步饱和时，暂停积分累积。首次激活时会把历史误差初始化为当前误差，避免微分项产生突变；PID 退出或仿真重置时，会清空积分、历史误差和激活状态。速度指令非零或轮组速度尚高时，轮速目标完全由策略输出决定。
 
-当前 `zb02w_ts.yaml` 已启用该功能，参数为：
+当前 `Zb02wTsConfig` 已启用该功能，参数为：
 
-```yaml
-wheel_stop_pid_enabled: true
-wheel_stop_pid_kp: 1.0
-wheel_stop_pid_ki: 7.0
-wheel_stop_pid_kd: 0.00005
-wheel_stop_pid_output_limit: 20.0
+```python
+@dataclass(frozen=True, kw_only=True)
+class Zb02wTsConfig(Zb02wRoughConfig):
+    wheel_stop_pid_enabled: bool = True
+    wheel_stop_pid_kp: float = 1.0
+    wheel_stop_pid_ki: float = 2.0
+    wheel_stop_pid_kd: float = 0.00005
+    wheel_stop_pid_output_limit: float = 20.0
 ```
 
 其余现有 M20 / ZB02W 配置默认关闭停车 PID。调参时建议先限制 `wheel_stop_pid_output_limit`，再依次调整 `kp`、`ki` 和 `kd`，并观察停车阶段的各轮速度及目标轮速，避免振荡或积分累积过快。当前代码中的 `wheel_action_vel_deadzone` 仅被读取，相关死区处理已注释，因此该字段不会使策略轮速自动归零。
 
 ## 配置要点
+
+配置位于 `mujoco_sim.configs`，均为冻结的关键字参数 dataclass。公共层级如下：
+
+```text
+MujocoSimConfig
+├── WheelLeggedConfig
+│   ├── M20FlatConfig
+│   │   └── M20RoughConfig
+│   └── Zb02wFlatConfig
+│       └── Zb02wRoughConfig
+│           └── Zb02wTsConfig
+└── Wh044xConfig
+```
+
+Rough 和 TS 配置继承对应机器人的 Flat 配置，只声明有差异的字段。所有序列参数使用 tuple；需要调整配置时应继续创建子类，而不是修改已有配置实例。
 
 | 字段 | 作用 |
 |---|---|
@@ -192,7 +207,7 @@ wheel_stop_pid_output_limit: 20.0
 ```text
 mujoco_sim/
 ├── run_script.py              # 统一入口，根据 --filename 执行 scripts/ 下的脚本
-├── configs/                   # 机器人、策略、场景和控制参数
+├── configs/                   # dataclass 配置：公共基类及各机器人 Flat/Rough/TS 子类
 ├── scripts/
 │   ├── base/
 │   │   ├── base.py            # 通用仿真循环
@@ -219,8 +234,8 @@ mujoco_sim/
 
 ## 添加新机器人或场景
 
-1. 在 `configs/` 新增 YAML，并确保模型 / 策略路径可以通过 `{mujoco_workspace_dir}` 正确展开。
-2. 在 `scripts/` 新建同名入口脚本，继承 `MujocoDeploy`、`MujocoDeployWl` 或 `MujocoDeployWh`。
+1. 在 `configs/` 中继承对应机器人的 Flat 配置类，只覆盖新场景需要修改或新增的字段。
+2. 在 `scripts/` 新建同名入口脚本，实例化该配置类并传给 `MujocoDeploy`、`MujocoDeployWl` 或 `MujocoDeployWh` 子类。
 3. 按控制方式实现 `update_obs()`、`update_model_in()`、`update_action()`、`update_tau()`；需要初始化或重置内部状态时覆盖 `_init_control()` / `_reset_control()`。
 4. 核对 observation、action、关节和 actuator 的维度及顺序。
 5. 使用 `python mujoco_sim/run_script.py --filename=<name>` 启动。

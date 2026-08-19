@@ -1,3 +1,4 @@
+from mujoco_sim.configs import M20RoughConfig
 from mujoco_sim.scripts.base.base_wl import MujocoDeployWl
 from mujoco_sim.utils.gait_phase_generator import GaitPhaseGenerator
 from mujoco_sim.utils.deploy_func import quat_rotate_inverse
@@ -5,13 +6,11 @@ import numpy as np
 from data_vis import PlotJugglerUDP
 pj = PlotJugglerUDP()
 
-yaml_filename = "m20_rough.yaml"
-
 class M20RoughDeploy(MujocoDeployWl):
 
-    def __init__(self, yaml_filename, device="cpu"):
-        super().__init__(yaml_filename, device)
-        self.max_delta_cmd = np.array(self.config["max_command_rate"], dtype=np.float32) * self.ctrl_dt # type: ignore
+    def __init__(self, config: M20RoughConfig, device="cpu"):
+        super().__init__(config, device)
+        self.max_delta_cmd = np.array(config.max_command_rate, dtype=np.float32) * self.ctrl_dt
 
     def update_model_in(self):
         self.model_in = self.obs
@@ -64,5 +63,5 @@ class M20RoughDeploy(MujocoDeployWl):
         pj.send_array("obs", self.obs)
 
 if __name__ == "__main__":
-    deploy = M20RoughDeploy(yaml_filename)
+    deploy = M20RoughDeploy(M20RoughConfig())
     deploy.run()

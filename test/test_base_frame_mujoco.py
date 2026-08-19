@@ -1,10 +1,17 @@
-import argparse
 import numpy as np
 import mujoco
-from deploy.deploy_mujoco.utils.deploy_func import quat_conjugate, quat_mult, quat_rotate, quat_rotate_inverse
-from legged_gym import LEGGED_GYM_ROOT_DIR
+from mujoco_sim.configs import M20FlatConfig
+from mujoco_sim.utils.deploy_func import (
+    quat_conjugate,
+    quat_mult,
+    quat_rotate,
+    quat_rotate_inverse,
+)
 
-xml_path = f"{LEGGED_GYM_ROOT_DIR}/resources/robots/M20_mjcf/mjcf/M20.xml"
+__test__ = False  # Manual MuJoCo diagnostic; run this module directly.
+
+config = M20FlatConfig()
+xml_path = str(config.xml_path)
 base_name = "base_link"
 
 def assert_close(name, a, b, atol=1e-6):
@@ -194,7 +201,7 @@ def main():
     if base_body_id == -1:
         raise ValueError(f"Base body '{base_name}' not found.")
 
-    leg_joint_idx = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14]
+    leg_joint_idx = np.asarray(config.leg_joint_idxx, dtype=np.intp)
 
     test_basic_quaternion_math()
     debug_current_base_state(model, data, base_body_id)

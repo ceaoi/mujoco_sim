@@ -1,10 +1,9 @@
+from mujoco_sim.configs import Zb02wRoughConfig
 from mujoco_sim.scripts.zb02w_flat import Zb02wFlatDeploy
-
-yaml_filename = "zb02w_rough.yaml"
 
 class Zb02wRoughDeploy(Zb02wFlatDeploy):
     pass
 
 if __name__ == "__main__":
-    deploy = Zb02wRoughDeploy(yaml_filename)
+    deploy = Zb02wRoughDeploy(Zb02wRoughConfig())
     deploy.run()

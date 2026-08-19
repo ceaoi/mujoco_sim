@@ -1,28 +1,12 @@
-import os
 import sys
 
 import numpy as np
-import yaml
 
+from mujoco_sim.configs import Wh044xConfig
 from mujoco_sim.scripts.base.base_wh import MujocoDeployWh
 
-yaml_filename = "wh044x.yaml"
-
-def _load_chassis_build_dir(yaml_filename):
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    mujoco_workspace_dir = os.path.dirname(script_dir)
-    config_path = os.path.join(mujoco_workspace_dir, "configs", yaml_filename)
-
-    with open(config_path, "r") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader) or {}
-
-    build_dir = config["chassis_build_dir"]
-    return (
-        build_dir.replace("{mujoco_workspace_dir}", mujoco_workspace_dir)
-    )
-
-
-_build_dir = _load_chassis_build_dir(yaml_filename)
+CONFIG = Wh044xConfig()
+_build_dir = str(CONFIG.chassis_build_dir)
 if _build_dir not in sys.path:
     sys.path.insert(0, _build_dir)
 
@@ -75,5 +59,5 @@ class Wh044xDeploy(MujocoDeployWh):
 
 
 if __name__ == "__main__":
-    deploy = Wh044xDeploy("wh044x.yaml")
+    deploy = Wh044xDeploy(CONFIG)
     deploy.run()

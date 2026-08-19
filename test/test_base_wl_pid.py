@@ -1,9 +1,14 @@
-from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-import yaml
 
+from mujoco_sim.configs import (
+    M20FlatConfig,
+    M20RoughConfig,
+    Zb02wFlatConfig,
+    Zb02wRoughConfig,
+    Zb02wTsConfig,
+)
 from mujoco_sim.scripts.base.base_wl import MujocoDeployWl, wheel_stop_pid
 
 
@@ -13,6 +18,12 @@ class _FakePolicy:
 
     def run(self, output_names, inputs):
         return [self._action.copy()]
+
+    def get_inputs(self):
+        return [SimpleNamespace(name="obs")]
+
+    def get_outputs(self):
+        return [SimpleNamespace(name="action")]
 
 
 def _make_deploy(action, cmd, wheel_velocity, kp=1.0, ki=0.0, kd=0.0):
@@ -107,7 +118,7 @@ def test_update_action_adds_pid_only_for_zero_command_without_derivative_kick():
 
     deploy.update_action()
 
-    policy_target = np.array([0.9, -0.9, 0.1, -0.1], dtype=np.float32)
+    policy_target = np.array([1.0, -1.0, 0.2, -0.2], dtype=np.float32)
     np.testing.assert_allclose(
         deploy.targ_dof_vel,
         policy_target + np.array([-2.0, 2.0, -1.0, 1.0], dtype=np.float32),
@@ -130,7 +141,7 @@ def test_nonzero_command_preserves_policy_target_and_clears_pid_state():
 
     deploy.update_action()
 
-    np.testing.assert_allclose(deploy.targ_dof_vel, [0.9, -0.9, 0.1, -0.1])
+    np.testing.assert_allclose(deploy.targ_dof_vel, [1.0, -1.0, 0.2, -0.2])
     np.testing.assert_allclose(deploy.wheel_stop_pid_integral, np.zeros(4))
     np.testing.assert_allclose(deploy.wheel_stop_pid_previous_error, np.zeros(4))
     assert not deploy.wheel_stop_pid_active
@@ -152,7 +163,7 @@ def test_disabled_pid_preserves_policy_target_and_clears_pid_state():
 
     deploy.update_action()
 
-    np.testing.assert_allclose(deploy.targ_dof_vel, [0.9, -0.9, 0.1, -0.1])
+    np.testing.assert_allclose(deploy.targ_dof_vel, [1.0, -1.0, 0.2, -0.2])
     np.testing.assert_allclose(deploy.wheel_stop_pid_integral, np.zeros(4))
     np.testing.assert_allclose(deploy.wheel_stop_pid_previous_error, np.zeros(4))
     assert not deploy.wheel_stop_pid_active
@@ -176,22 +187,36 @@ def test_reset_control_clears_wheel_stop_pid_state():
     assert not deploy.wheel_stop_pid_active
 
 
-def test_wheel_stop_pid_config_is_present_in_all_deployments():
-    config_dir = Path(__file__).resolve().parents[1] / "configs"
-    config_names = (
-        "m20_flat.yaml",
-        "m20_rough.yaml",
-        "zb02w_flat.yaml",
-        "zb02w_rough.yaml",
-        "zb02w_ts.yaml",
+def test_init_control_converts_immutable_config_indices_for_numpy_indexing():
+    deploy = object.__new__(MujocoDeployWl)
+    deploy.config = Zb02wFlatConfig(is_rnn=False)
+    deploy.ctrl_dt = 0.02
+    deploy._make_onnx_session = lambda _: _FakePolicy(np.zeros(16, dtype=np.float32))
+
+    deploy._init_control()
+
+    assert deploy.leg_joint_idx.dtype == np.intp
+    assert deploy.wheel_joint_idx.dtype == np.intp
+    assert deploy.leg_actions_to_mujoco.dtype == np.intp
+    state = np.arange(16)
+    np.testing.assert_array_equal(
+        state[deploy.leg_joint_idx],
+        state[list(deploy.config.leg_joint_idx)],
     )
 
-    enabled_configs = {"zb02w_ts.yaml"}
-    for config_name in config_names:
-        with (config_dir / config_name).open("r", encoding="utf-8") as config_file:
-            config = yaml.safe_load(config_file)
-        assert config["wheel_stop_pid_enabled"] is (config_name in enabled_configs)
-        assert isinstance(config["wheel_stop_pid_kp"], float)
-        assert isinstance(config["wheel_stop_pid_ki"], float)
-        assert isinstance(config["wheel_stop_pid_kd"], float)
-        assert isinstance(config["wheel_stop_pid_output_limit"], float)
+
+def test_wheel_stop_pid_config_is_present_in_all_deployments():
+    configs = (
+        M20FlatConfig(),
+        M20RoughConfig(),
+        Zb02wFlatConfig(),
+        Zb02wRoughConfig(),
+        Zb02wTsConfig(),
+    )
+
+    for config in configs:
+        assert config.wheel_stop_pid_enabled is isinstance(config, Zb02wTsConfig)
+        assert isinstance(config.wheel_stop_pid_kp, float)
+        assert isinstance(config.wheel_stop_pid_ki, float)
+        assert isinstance(config.wheel_stop_pid_kd, float)
+        assert isinstance(config.wheel_stop_pid_output_limit, float)
