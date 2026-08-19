@@ -51,7 +51,7 @@ class Zb02wDepthDeploy(Zb02wRoughDeploy):
 
     def _load_model(self, merged_xml_path: str) -> mujoco.MjModel:
         config = self.config
-        self._validate_depth_camera_config(config)
+        self._validate_depth_camera_config(config) # type: ignore
 
         spec = mujoco.MjSpec.from_file(merged_xml_path)
         target_body = spec.body(config.depth_camera_link)
@@ -274,11 +274,11 @@ class Zb02wDepthDeploy(Zb02wRoughDeploy):
             pass
 
     def _update_depth_camera(self) -> None:
-        self._depth_renderer.update_scene(
+        self._depth_renderer.update_scene( # type: ignore
             self.data,
             camera=self.config.depth_camera_name,
         )
-        raw_depth = self._depth_renderer.render()
+        raw_depth = self._depth_renderer.render() # type: ignore
         (
             self.depth_image_metric,
             self.depth_image,
@@ -299,6 +299,7 @@ class Zb02wDepthDeploy(Zb02wRoughDeploy):
                 fy=self.config.depth_camera_display_scale,
                 interpolation=cv2.INTER_NEAREST,
             )
+            display = cv2.applyColorMap(display, cv2.COLORMAP_TURBO)
             try:
                 cv2.imshow(DEPTH_WINDOW_NAME, display)
                 cv2.waitKey(1)

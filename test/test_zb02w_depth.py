@@ -398,22 +398,32 @@ def test_depth_update_uses_simulation_time_and_displays_proximity(monkeypatch):
         / (deploy.config.depth_max - deploy.config.depth_min)
         * 255.0
     )
-    assert shown[0][1].shape == (4, 8)
+    assert shown[0][1].shape == (4, 8, 3)
+    expected_first_display = np.repeat(
+        np.repeat(
+            np.array([[expected_first, 0]], dtype=np.uint8),
+            4,
+            axis=0,
+        ),
+        4,
+        axis=1,
+    )
+    expected_second_display = np.repeat(
+        np.repeat(
+            np.array([[expected_second, 0]], dtype=np.uint8),
+            4,
+            axis=0,
+        ),
+        4,
+        axis=1,
+    )
     np.testing.assert_array_equal(
         shown[0][1],
-        np.repeat(
-            np.repeat([[expected_first, 0]], 4, axis=0),
-            4,
-            axis=1,
-        ),
+        cv2.applyColorMap(expected_first_display, cv2.COLORMAP_TURBO),
     )
     np.testing.assert_array_equal(
         shown[1][1],
-        np.repeat(
-            np.repeat([[expected_second, 0]], 4, axis=0),
-            4,
-            axis=1,
-        ),
+        cv2.applyColorMap(expected_second_display, cv2.COLORMAP_TURBO),
     )
     assert deploy._next_depth_update_time == pytest.approx(
         2.0 * deploy.config.depth_camera_update_period

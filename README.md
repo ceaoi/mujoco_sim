@@ -156,7 +156,7 @@ config = M20FlatConfig(plotjuggler_enabled=False)
 - `depth_image`：形状 `(1, 1, 36, 64)`，近处为 1、远处为 0，可直接作为后续深度策略的输入布局。
 - `depth_points_world`：形状 `(N, 3)`，将有效深度按 `depth_pointcloud_stride` 下采样并反投影到 MuJoCo 世界坐标系，单位为米。
 
-OpenCV 窗口以白色表示近处、黑色表示远处，默认使用最近邻插值将 64×36 预览放大 4 倍至 256×144；MuJoCo 3D viewer 默认同时用红色球体显示深度点云。点云采用相机 `+X` 向右、`+Y` 向上、`-Z` 向前的坐标约定，并通过 `points_camera @ R_world_camera.T + camera_position` 转换到世界坐标。无命中或达到 `depth_max` 的像素不会生成点。
+OpenCV 窗口使用 `COLORMAP_TURBO` 伪彩色显示近远变化，并默认通过最近邻插值将 64×36 预览放大 4 倍至 256×144；颜色映射仍使用完整的 `depth_min`–`depth_max` 范围，不改变深度数据。MuJoCo 3D viewer 默认同时用红色球体显示深度点云。点云采用相机 `+X` 向右、`+Y` 向上、`-Z` 向前的坐标约定，并通过 `points_camera @ R_world_camera.T + camera_position` 转换到世界坐标。无命中或达到 `depth_max` 的像素不会生成点。
 
 可以分别通过 `depth_camera_display=False` 和 `depth_pointcloud_display=False` 关闭二维窗口或三维点云。若 OpenCV HighGUI 不可用，二维窗口会告警并自动关闭，三维点云与深度采集不受影响。深度入口始终需要可用的 MuJoCo OpenGL 渲染后端；仅关闭预览窗口时可使用 EGL 等离屏后端。相机通过 `MjSpec` 动态加入编译模型，不会修改原始 ZB02W MJCF。
 
@@ -224,7 +224,7 @@ Rough 和 TS 配置继承对应机器人的 Flat 配置，只声明有差异的�
 | `depth_camera_width`, `depth_camera_height`, `depth_camera_fovy` | 深度图分辨率及垂直视场角 |
 | `depth_camera_near` | 深度相机绝对近裁剪距离；初始化时按 `model.stat.extent` 换算为 MuJoCo `znear` |
 | `depth_camera_update_period`, `depth_min`, `depth_max` | 深度更新周期和有效距离范围 |
-| `depth_camera_display` | 是否用 OpenCV 实时显示近白远黑的深度图 |
+| `depth_camera_display` | 是否用 OpenCV 实时显示 `COLORMAP_TURBO` 伪彩色深度图 |
 | `depth_camera_display_scale` | OpenCV 预览的最近邻整数放大倍数；默认为 `4` |
 | `depth_pointcloud_display` | 是否在 MuJoCo 3D viewer 中显示深度点云 |
 | `depth_pointcloud_stride`, `depth_pointcloud_radius` | 点云像素采样间隔和球形点半径；默认分别为 `1` 和 `0.01 m` |
