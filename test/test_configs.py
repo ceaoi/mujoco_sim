@@ -89,6 +89,7 @@ def test_zb02w_depth_config_inherits_student_policy_and_camera_defaults():
     assert depth.depth_min == pytest.approx(0.05)
     assert depth.depth_max == pytest.approx(3.0)
     assert depth.depth_camera_display
+    assert depth.depth_camera_display_update_period == pytest.approx(1.0 / 10.0)
     assert depth.depth_camera_display_scale == 4
     assert depth.depth_pointcloud_display
     assert depth.depth_pointcloud_stride == 1

@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-import cv2
+import matplotlib.pyplot as plt
 import mujoco
 import numpy as np
 import pytest
@@ -34,6 +34,10 @@ def _bare_deploy(**config_overrides):
         **config_overrides,
     }
     deploy.config = Zb02wDepthConfig(**config_kwargs)
+    deploy._depth_figure = None
+    deploy._depth_axes = None
+    deploy._depth_image_artist = None
+    deploy._next_depth_display_update_time = 0.0
     return deploy
 
 
@@ -144,6 +148,14 @@ def test_load_model_rejects_missing_link_and_invalid_quaternion(tmp_path):
         ),
         ({"depth_camera_update_period": 0.0}, "update_period"),
         ({"depth_camera_update_period": float("nan")}, "update_period"),
+        (
+            {"depth_camera_display_update_period": 0.0},
+            "display_update_period",
+        ),
+        (
+            {"depth_camera_display_update_period": float("nan")},
+            "display_update_period",
+        ),
         ({"depth_camera_display_scale": 0}, "display_scale"),
         ({"depth_camera_display_scale": True}, "display_scale"),
         ({"depth_min": 3.0, "depth_max": 3.0}, "depth range"),
@@ -208,6 +220,74 @@ class _FakeRenderer:
 
     def close(self):
         self.closed = True
+
+
+class _FakeImageArtist:
+
+    def __init__(self):
+        self.data_updates = []
+
+    def set_data(self, data):
+        self.data_updates.append(np.array(data, copy=True))
+
+
+class _FakeFigureManager:
+
+    def __init__(self):
+        self.window_titles = []
+
+    def set_window_title(self, title):
+        self.window_titles.append(title)
+
+
+class _FakeFigureCanvas:
+    required_interactive_framework = "test"
+
+    def __init__(self):
+        self.manager = _FakeFigureManager()
+        self.draw_idle_calls = 0
+        self.flush_events_calls = 0
+        self.flush_events_exception = None
+
+    def draw_idle(self):
+        self.draw_idle_calls += 1
+
+    def flush_events(self):
+        self.flush_events_calls += 1
+        if self.flush_events_exception is not None:
+            raise self.flush_events_exception
+
+
+class _FakeFigure:
+
+    def __init__(self):
+        self.canvas = _FakeFigureCanvas()
+        self.size_calls = []
+        self.adjust_calls = []
+
+    def get_dpi(self):
+        return 100.0
+
+    def set_size_inches(self, width, height, *, forward):
+        self.size_calls.append((width, height, forward))
+
+    def subplots_adjust(self, **kwargs):
+        self.adjust_calls.append(kwargs)
+
+
+class _FakeAxes:
+
+    def __init__(self):
+        self.axis_off_calls = 0
+        self.imshow_calls = []
+        self.image_artist = _FakeImageArtist()
+
+    def set_axis_off(self):
+        self.axis_off_calls += 1
+
+    def imshow(self, data, **kwargs):
+        self.imshow_calls.append((np.array(data, copy=True), kwargs))
+        return self.image_artist
 
 
 class _CountingLock:
@@ -356,6 +436,7 @@ def test_depth_update_uses_simulation_time_and_displays_proximity(monkeypatch):
     renderer = _FakeRenderer(
         [
             np.array([[0.3, 3.0]], dtype=np.float32),
+            np.array([[0.9, 3.0]], dtype=np.float32),
             np.array([[1.65, 3.0]], dtype=np.float32),
         ]
     )
@@ -364,73 +445,77 @@ def test_depth_update_uses_simulation_time_and_displays_proximity(monkeypatch):
     deploy._next_depth_update_time = 0.0
     deploy.depth_camera_display_enabled = True
     deploy.depth_pointcloud_display_enabled = True
-    deploy._depth_window_created = False
     deploy.viewer = None
-    shown = []
+    figure = _FakeFigure()
+    axes = _FakeAxes()
+    show_calls = []
     monkeypatch.setattr(
         deploy,
         "_depth_to_world_points",
         lambda metric, valid: np.empty((0, 3), dtype=np.float32),
     )
-    monkeypatch.setattr(cv2, "imshow", lambda name, image: shown.append((name, image)))
-    monkeypatch.setattr(cv2, "waitKey", lambda delay: -1)
+    monkeypatch.setattr(plt, "subplots", lambda: (figure, axes))
+    monkeypatch.setattr(plt, "show", lambda **kwargs: show_calls.append(kwargs))
 
     deploy._update_depth_camera_if_due()
     deploy.data.time = deploy.config.depth_camera_update_period / 2.0
     deploy._update_depth_camera_if_due()
     deploy.data.time = deploy.config.depth_camera_update_period
     deploy._update_depth_camera_if_due()
+    deploy.data.time = deploy.config.depth_camera_display_update_period
+    deploy._update_depth_camera_if_due()
 
-    assert renderer.render_calls == 2
+    assert renderer.render_calls == 3
     assert [call[1] for call in renderer.update_calls] == [
         deploy.config.depth_camera_name,
         deploy.config.depth_camera_name,
+        deploy.config.depth_camera_name,
     ]
-    assert len(shown) == 2
-    assert shown[0][0] == DEPTH_WINDOW_NAME
-    expected_first = round(
+    expected_first = (
         (deploy.config.depth_max - 0.3)
         / (deploy.config.depth_max - deploy.config.depth_min)
-        * 255.0
     )
-    expected_second = round(
+    expected_second = (
         (deploy.config.depth_max - 1.65)
         / (deploy.config.depth_max - deploy.config.depth_min)
-        * 255.0
     )
-    assert shown[0][1].shape == (4, 8, 3)
-    expected_first_display = np.repeat(
-        np.repeat(
-            np.array([[expected_first, 0]], dtype=np.uint8),
-            4,
-            axis=0,
-        ),
-        4,
-        axis=1,
+    assert figure.canvas.manager.window_titles == [DEPTH_WINDOW_NAME]
+    assert figure.size_calls == [(0.08, 0.04, True)]
+    assert figure.adjust_calls == [
+        {"left": 0.0, "right": 1.0, "bottom": 0.0, "top": 1.0}
+    ]
+    assert axes.axis_off_calls == 1
+    assert len(axes.imshow_calls) == 1
+    first_image, image_options = axes.imshow_calls[0]
+    np.testing.assert_allclose(
+        first_image,
+        [[expected_first, 0.0]],
+        atol=1e-6,
     )
-    expected_second_display = np.repeat(
-        np.repeat(
-            np.array([[expected_second, 0]], dtype=np.uint8),
-            4,
-            axis=0,
-        ),
-        4,
-        axis=1,
+    assert image_options == {
+        "cmap": "turbo",
+        "vmin": 0.0,
+        "vmax": 1.0,
+        "interpolation": "nearest",
+        "origin": "upper",
+        "aspect": "auto",
+    }
+    assert show_calls == [{"block": False}]
+    assert len(axes.image_artist.data_updates) == 1
+    np.testing.assert_allclose(
+        axes.image_artist.data_updates[0],
+        [[expected_second, 0.0]],
+        atol=1e-6,
     )
-    np.testing.assert_array_equal(
-        shown[0][1],
-        cv2.applyColorMap(expected_first_display, cv2.COLORMAP_TURBO),
-    )
-    np.testing.assert_array_equal(
-        shown[1][1],
-        cv2.applyColorMap(expected_second_display, cv2.COLORMAP_TURBO),
-    )
-    assert deploy._next_depth_update_time == pytest.approx(
-        2.0 * deploy.config.depth_camera_update_period
+    assert figure.canvas.draw_idle_calls == 2
+    assert figure.canvas.flush_events_calls == 2
+    assert deploy._next_depth_update_time > deploy.data.time
+    assert deploy._next_depth_display_update_time == pytest.approx(
+        2.0 * deploy.config.depth_camera_display_update_period
     )
 
 
-def test_opencv_failure_does_not_disable_pointcloud(monkeypatch):
+def test_matplotlib_failure_does_not_disable_pointcloud(monkeypatch):
     deploy = _bare_deploy(
         depth_camera_width=1,
         depth_camera_height=1,
@@ -442,8 +527,12 @@ def test_opencv_failure_does_not_disable_pointcloud(monkeypatch):
     deploy.data = SimpleNamespace(time=0.0)
     deploy.depth_camera_display_enabled = True
     deploy.depth_pointcloud_display_enabled = True
-    deploy._depth_window_created = False
     deploy.viewer = None
+    figure = _FakeFigure()
+    figure.canvas.flush_events_exception = RuntimeError(
+        "GUI backend is not available"
+    )
+    axes = _FakeAxes()
     expected_points = np.array([[1.0, 2.0, 3.0]], dtype=np.float32)
     monkeypatch.setattr(
         deploy,
@@ -456,19 +545,37 @@ def test_opencv_failure_does_not_disable_pointcloud(monkeypatch):
         "_draw_depth_pointcloud",
         lambda: drawn.append(deploy.depth_points_world.copy()),
     )
+    monkeypatch.setattr(plt, "subplots", lambda: (figure, axes))
+    monkeypatch.setattr(plt, "show", lambda **kwargs: None)
+    monkeypatch.setattr(plt, "close", lambda target: None)
 
-    def raise_highgui_error(name, image):
-        raise cv2.error("HighGUI is not available")
-
-    monkeypatch.setattr(cv2, "imshow", raise_highgui_error)
-
-    with pytest.warns(RuntimeWarning, match="OpenCV depth display disabled"):
+    with pytest.warns(RuntimeWarning, match="Matplotlib depth display disabled"):
         deploy._update_depth_camera()
 
     assert not deploy.depth_camera_display_enabled
     assert deploy.depth_pointcloud_display_enabled
     np.testing.assert_array_equal(deploy.depth_points_world, expected_points)
     np.testing.assert_array_equal(drawn, [expected_points])
+
+
+def test_noninteractive_matplotlib_backend_disables_display(monkeypatch):
+    deploy = _bare_deploy(depth_camera_width=1, depth_camera_height=1)
+    deploy.depth_image = np.zeros((1, 1, 1, 1), dtype=np.float32)
+    deploy.depth_camera_display_enabled = True
+    figure = _FakeFigure()
+    figure.canvas.required_interactive_framework = None
+    axes = _FakeAxes()
+    closed = []
+    monkeypatch.setattr(plt, "subplots", lambda: (figure, axes))
+    monkeypatch.setattr(plt, "get_backend", lambda: "agg")
+    monkeypatch.setattr(plt, "close", closed.append)
+
+    with pytest.warns(RuntimeWarning, match="backend 'agg' is not interactive"):
+        deploy._display_depth_image()
+
+    assert not deploy.depth_camera_display_enabled
+    assert closed == [figure]
+    assert deploy._depth_figure is None
 
 
 def test_reset_clears_depth_buffers_and_restarts_schedule(monkeypatch):
@@ -481,6 +588,7 @@ def test_reset_clears_depth_buffers_and_restarts_schedule(monkeypatch):
     viewer = _FakeViewer(scene)
     deploy.viewer = viewer
     deploy._next_depth_update_time = 10.0
+    deploy._next_depth_display_update_time = 10.0
     monkeypatch.setattr(Zb02wRoughDeploy, "reset", lambda self: None)
 
     deploy.reset()
@@ -495,6 +603,7 @@ def test_reset_clears_depth_buffers_and_restarts_schedule(monkeypatch):
     assert scene.ngeom == 0
     assert viewer.lock_entries == 1
     assert deploy._next_depth_update_time == 0.0
+    assert deploy._next_depth_display_update_time == 0.0
 
 
 def test_close_depth_camera_releases_renderer_and_window(monkeypatch):
@@ -503,9 +612,12 @@ def test_close_depth_camera_releases_renderer_and_window(monkeypatch):
     deploy._depth_renderer = renderer
     deploy.depth_points_world = np.ones((1, 3), dtype=np.float32)
     deploy.viewer = None
-    deploy._depth_window_created = True
-    destroyed = []
-    monkeypatch.setattr(cv2, "destroyWindow", destroyed.append)
+    figure = object()
+    deploy._depth_figure = figure
+    deploy._depth_axes = object()
+    deploy._depth_image_artist = object()
+    closed = []
+    monkeypatch.setattr(plt, "close", closed.append)
 
     deploy.close_depth_camera()
     deploy.close_depth_camera()
@@ -513,5 +625,7 @@ def test_close_depth_camera_releases_renderer_and_window(monkeypatch):
     assert renderer.closed
     assert deploy._depth_renderer is None
     assert deploy.depth_points_world.shape == (0, 3)
-    assert destroyed == [DEPTH_WINDOW_NAME]
-    assert not deploy._depth_window_created
+    assert closed == [figure]
+    assert deploy._depth_figure is None
+    assert deploy._depth_axes is None
+    assert deploy._depth_image_artist is None

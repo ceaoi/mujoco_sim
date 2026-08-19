@@ -91,6 +91,7 @@ class Zb02wDepthConfig(Zb02wTsConfig):
     depth_min: float = 0.05
     depth_max: float = 3.0
     depth_camera_display: bool = True
+    depth_camera_display_update_period: float = 1.0 / 10.0
     depth_camera_display_scale: int = 4
     depth_pointcloud_display: bool = True
     depth_pointcloud_stride: int = 1

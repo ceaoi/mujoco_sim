@@ -1,7 +1,7 @@
 import math
 import warnings
 
-import cv2
+import matplotlib.pyplot as plt
 import mujoco
 import numpy as np
 
@@ -34,11 +34,14 @@ class Zb02wDepthDeploy(Zb02wRoughDeploy):
         self.depth_points_world = np.empty((0, 3), dtype=np.float32)
         self._depth_valid_mask = np.zeros(shape, dtype=bool)
         self._next_depth_update_time = 0.0
+        self._next_depth_display_update_time = 0.0
         self.depth_camera_display_enabled = bool(config.depth_camera_display)
         self.depth_pointcloud_display_enabled = bool(
             config.depth_pointcloud_display
         )
-        self._depth_window_created = False
+        self._depth_figure = None
+        self._depth_axes = None
+        self._depth_image_artist = None
         self._depth_camera_id = mujoco.mj_name2id(
             self.robot,
             mujoco.mjtObj.mjOBJ_CAMERA,
@@ -115,6 +118,13 @@ class Zb02wDepthDeploy(Zb02wRoughDeploy):
             or config.depth_camera_update_period <= 0.0
         ):
             raise ValueError("depth_camera_update_period must be positive")
+        if (
+            not math.isfinite(config.depth_camera_display_update_period)
+            or config.depth_camera_display_update_period <= 0.0
+        ):
+            raise ValueError(
+                "depth_camera_display_update_period must be positive"
+            )
         if (
             isinstance(config.depth_camera_display_scale, bool)
             or not isinstance(config.depth_camera_display_scale, int)
@@ -273,6 +283,91 @@ class Zb02wDepthDeploy(Zb02wRoughDeploy):
             # The passive viewer can already be closed when run() unwinds.
             pass
 
+    def _create_depth_window(self) -> None:
+        figure, axes = plt.subplots()
+        self._depth_figure = figure
+        self._depth_axes = axes
+
+        interactive_framework = getattr(
+            figure.canvas,
+            "required_interactive_framework",
+            None,
+        )
+        if interactive_framework is None:
+            raise RuntimeError(
+                f"Matplotlib backend {plt.get_backend()!r} is not interactive"
+            )
+
+        manager = figure.canvas.manager
+        if manager is not None:
+            manager.set_window_title(DEPTH_WINDOW_NAME)
+
+        display_width = (
+            self.config.depth_camera_width
+            * self.config.depth_camera_display_scale
+        )
+        display_height = (
+            self.config.depth_camera_height
+            * self.config.depth_camera_display_scale
+        )
+        dpi = figure.get_dpi()
+        figure.set_size_inches(
+            display_width / dpi,
+            display_height / dpi,
+            forward=True,
+        )
+        figure.subplots_adjust(left=0.0, right=1.0, bottom=0.0, top=1.0)
+        axes.set_axis_off()
+        self._depth_image_artist = axes.imshow(
+            self.depth_image[0, 0],
+            cmap="turbo",
+            vmin=0.0,
+            vmax=1.0,
+            interpolation="nearest",
+            origin="upper",
+            aspect="auto",
+        )
+        plt.show(block=False)
+
+    def _display_depth_image(self) -> None:
+        try:
+            if self._depth_figure is None:
+                self._create_depth_window()
+            else:
+                self._depth_image_artist.set_data(self.depth_image[0, 0])
+
+            self._depth_figure.canvas.draw_idle()
+            self._depth_figure.canvas.flush_events()
+        except Exception as exc:
+            self.depth_camera_display_enabled = False
+            self._close_depth_window()
+            warnings.warn(
+                f"Matplotlib depth display disabled: {exc}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
+    def _update_depth_display_if_due(self) -> None:
+        if not self.depth_camera_display_enabled:
+            return
+
+        now = float(self.data.time)
+        if now + np.finfo(np.float64).eps < self._next_depth_display_update_time:
+            return
+
+        self._display_depth_image()
+        elapsed_periods = max(
+            1,
+            math.floor(
+                (now - self._next_depth_display_update_time)
+                / self.config.depth_camera_display_update_period
+            )
+            + 1,
+        )
+        self._next_depth_display_update_time += (
+            elapsed_periods * self.config.depth_camera_display_update_period
+        )
+
     def _update_depth_camera(self) -> None:
         self._depth_renderer.update_scene( # type: ignore
             self.data,
@@ -290,27 +385,7 @@ class Zb02wDepthDeploy(Zb02wRoughDeploy):
         )
         self._draw_depth_pointcloud()
 
-        if self.depth_camera_display_enabled:
-            display = np.rint(self.depth_image[0, 0] * 255.0).astype(np.uint8)
-            display = cv2.resize(
-                display,
-                dsize=None,
-                fx=self.config.depth_camera_display_scale,
-                fy=self.config.depth_camera_display_scale,
-                interpolation=cv2.INTER_NEAREST,
-            )
-            display = cv2.applyColorMap(display, cv2.COLORMAP_TURBO)
-            try:
-                cv2.imshow(DEPTH_WINDOW_NAME, display)
-                cv2.waitKey(1)
-                self._depth_window_created = True
-            except cv2.error as exc:
-                self.depth_camera_display_enabled = False
-                warnings.warn(
-                    f"OpenCV depth display disabled: {exc}",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
+        self._update_depth_display_if_due()
 
     def _update_depth_camera_if_due(self) -> None:
         now = float(self.data.time)
@@ -342,6 +417,7 @@ class Zb02wDepthDeploy(Zb02wRoughDeploy):
             self._depth_valid_mask.fill(False)
             self._clear_depth_pointcloud()
             self._next_depth_update_time = 0.0
+            self._next_depth_display_update_time = 0.0
 
     def close_depth_camera(self) -> None:
         if hasattr(self, "depth_points_world"):
@@ -349,12 +425,18 @@ class Zb02wDepthDeploy(Zb02wRoughDeploy):
         if self._depth_renderer is not None:
             self._depth_renderer.close()
             self._depth_renderer = None
-        if self._depth_window_created:
+
+        self._close_depth_window()
+
+    def _close_depth_window(self) -> None:
+        if self._depth_figure is not None:
             try:
-                cv2.destroyWindow(DEPTH_WINDOW_NAME)
-            except cv2.error:
+                plt.close(self._depth_figure)
+            except Exception:
                 pass
-            self._depth_window_created = False
+        self._depth_figure = None
+        self._depth_axes = None
+        self._depth_image_artist = None
 
     def run(self, duration=1e3):
         try:
