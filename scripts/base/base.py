@@ -85,7 +85,7 @@ class MujocoDeploy:
             ball_xml_path,
             config.terrain_xml_path,
         )
-        self.robot = mujoco.MjModel.from_xml_path(merged_xml_path)
+        self.robot = self._load_model(merged_xml_path)
         self.data = mujoco.MjData(self.robot)
         (
             self._base_joint_id,
@@ -155,6 +155,9 @@ class MujocoDeploy:
             self._disable_plotjuggler("send failed", exc)
 
     # ---- hooks (subclass overrides) ----
+
+    def _load_model(self, merged_xml_path: str) -> mujoco.MjModel:
+        return mujoco.MjModel.from_xml_path(merged_xml_path)
 
     def _init_control(self):
         pass

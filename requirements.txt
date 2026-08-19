@@ -2,3 +2,4 @@ mujoco>=3.9.0
 numpy>=1.21.0
 onnxruntime>=1.14.0
 pygame>=2.0.0
+opencv-python>=4.8.0

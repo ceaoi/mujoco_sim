@@ -1,3 +1,4 @@
+import math
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from mujoco_sim.configs import (
     Wh044xConfig,
     WheelLeggedConfig,
     Zb02wFlatConfig,
+    Zb02wDepthConfig,
     Zb02wRoughConfig,
     Zb02wTsConfig,
 )
@@ -24,6 +26,7 @@ def test_configuration_hierarchy_uses_flat_as_each_robot_base():
     assert issubclass(M20RoughConfig, M20FlatConfig)
     assert issubclass(Zb02wRoughConfig, Zb02wFlatConfig)
     assert issubclass(Zb02wTsConfig, Zb02wRoughConfig)
+    assert issubclass(Zb02wDepthConfig, Zb02wTsConfig)
     assert issubclass(Wh044xConfig, MujocoSimConfig)
 
 
@@ -62,6 +65,34 @@ def test_zb02w_rough_and_student_configs_inherit_expected_values():
     assert flat.plotjuggler_enabled
     assert rough.plotjuggler_enabled
     assert student.plotjuggler_enabled
+
+
+def test_zb02w_depth_config_inherits_student_policy_and_camera_defaults():
+    student = Zb02wTsConfig()
+    depth = Zb02wDepthConfig()
+
+    assert depth.policy_path == student.policy_path
+    assert depth.wheel_stop_pid_enabled == student.wheel_stop_pid_enabled
+    assert depth.wheel_stop_pid_ki == student.wheel_stop_pid_ki
+    assert depth.terrain_xml_path == student.terrain_xml_path
+    assert depth.depth_camera_name == "depth_camera"
+    assert depth.depth_camera_link == "base_link"
+    assert depth.depth_camera_pos == (0.375, 0.0175, 0.10225)
+    assert depth.depth_camera_quat == pytest.approx(
+        (math.cos(math.pi / 8.0), 0.0, math.sin(math.pi / 8.0), 0.0)
+    )
+    assert depth.depth_camera_width == 64
+    assert depth.depth_camera_height == 36
+    assert depth.depth_camera_fovy == pytest.approx(47.83)
+    assert depth.depth_camera_near == pytest.approx(0.05)
+    assert depth.depth_camera_update_period == pytest.approx(1.0 / 60.0)
+    assert depth.depth_min == pytest.approx(0.05)
+    assert depth.depth_max == pytest.approx(3.0)
+    assert depth.depth_camera_display
+    assert depth.depth_camera_display_scale == 4
+    assert depth.depth_pointcloud_display
+    assert depth.depth_pointcloud_stride == 1
+    assert depth.depth_pointcloud_radius == pytest.approx(0.01)
 
 
 def test_configs_use_absolute_paths_immutable_sequences_and_frozen_instances():

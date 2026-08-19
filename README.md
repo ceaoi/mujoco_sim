@@ -1,6 +1,6 @@
 # MuJoCo Sim
 
-`mujoco_sim` 用于把训练得到的 ONNX 运动策略部署到 MuJoCo，并通过 Xbox 类手柄实时控制机器人。当前包含 M20、ZB02W 两类轮足机器人，以及 WH044X 四轮转向底盘；M20 和 ZB02W 均提供平地、粗糙地形入口，ZB02W 还提供启用轮子静止 PID 的 student 策略入口。
+`mujoco_sim` 用于把训练得到的 ONNX 运动策略部署到 MuJoCo，并通过 Xbox 类手柄实时控制机器人。当前包含 M20、ZB02W 两类轮足机器人，以及 WH044X 四轮转向底盘；M20 和 ZB02W 均提供平地、粗糙地形入口，ZB02W 还提供 student 策略和深度相机入口。
 
 仿真启动时会把机器人模型、弹丸模型以及可选地形合并成 `tmp_merged.xml`，随后以 MuJoCo 仿真步长运行。控制器每隔 `control_decimation` 个仿真步更新一次；当前入口的控制周期均为 20 ms（50 Hz）。
 
@@ -13,6 +13,7 @@
 | `zb02w_flat` | ZB02W / 平地 | `Zb02wFlatConfig` | RNN ONNX 策略；腿位置 PD + 轮速度 PD |
 | `zb02w_rough` | ZB02W / 台阶地形 | `Zb02wRoughConfig` | RNN ONNX 策略；额外合并 `rough_stairs.xml` |
 | `zb02w_ts` | ZB02W / 台阶地形 | `Zb02wTsConfig` | student RNN ONNX 策略；启用轮子静止 PID |
+| `zb02w_depth` | ZB02W / 台阶地形 | `Zb02wDepthConfig` | TS 控制逻辑；固定式 64×36 深度相机和 OpenCV 预览 |
 | `wh044x` | WH044X / 平地 | `Wh044xConfig` | C++ `chassis` 运动学解算；直接写入转向和轮速 actuator control |
 
 ## 工作区与外部资源
@@ -45,7 +46,7 @@ conda activate ms
 pip install -r mujoco_sim/requirements.txt
 ```
 
-基础依赖包括 `mujoco>=3.9.0`、`numpy`、`onnxruntime` 和 `pygame`。MuJoCo 3.9 提供左上角 Base 状态 HUD 使用的 viewer 文本接口。此外还需要准备：
+基础依赖包括 `mujoco>=3.9.0`、`numpy`、`onnxruntime`、`pygame` 和 `opencv-python`。MuJoCo 3.9 提供左上角 Base 状态 HUD 和深度离屏渲染使用的接口。此外还需要准备：
 
 - PlotJuggler 遥测（可选）：需要发送调试数据时安装 [`data_vis`](https://github.com/ceaoi/data_vis)。未开启遥测时不会导入该包；开启但包或 UDP socket 不可用时会告警并自动关闭遥测，不影响仿真继续运行。
 - WH044X：编译可被 Python 导入的 `chassis` 扩展，并更新 `chassis_build_dir`。
@@ -64,6 +65,7 @@ python mujoco_sim/run_script.py --filename=m20_rough
 python mujoco_sim/run_script.py --filename=zb02w_flat
 python mujoco_sim/run_script.py --filename=zb02w_rough
 python mujoco_sim/run_script.py --filename=zb02w_ts
+python mujoco_sim/run_script.py --filename=zb02w_depth
 
 # WH044X（需要外部模型和 chassis 扩展）
 python mujoco_sim/run_script.py --filename=wh044x
@@ -142,6 +144,22 @@ config = M20FlatConfig(plotjuggler_enabled=False)
 
 关闭状态不会导入 `data_vis`。如果启用后导入、创建发送器或发送数据失败，`MujocoDeploy` 会发出一次 warning，将运行时开关以及 `self.config.plotjuggler_enabled` 更新为 `False`，随后停止发送但保持控制和仿真运行。
 
+## ZB02W 深度相机
+
+`zb02w_depth` 继承 `zb02w_ts` 的本体观测、student ONNX 推理和停车 PID，同时使用 MuJoCo 固定相机采集深度。当前 student ONNX 只有 53 维本体观测和 RNN 状态输入，因此深度图不会输入策略，只暴露给调试和后续策略接入。
+
+默认相机固定在 `base_link`，相对位置为 `(0.375, 0.0175, 0.10225) m`，以 60 Hz 输出 64×36 深度图；垂直 FOV 为 47.83°，有效范围为 0.05–3.0 m，绝对近裁剪距离为 0.05 m。`depth_camera_quat` 使用训练端的 `wxyz` 姿态约定，其中 `+X` 为前向、`+Z` 为上方；模型初始化时会自动复合固定轴对齐，将 MuJoCo/OpenGL 相机的本地 `-Z` 观察轴对齐到训练端 `+X`。因此配置中的纯 `+Y` pitch 45° 最终会让相机朝机器人前方并向下 45°。
+
+运行时提供两个数组：
+
+- `depth_image_metric`：形状 `(36, 64)`，单位为米并裁剪到 `[0.05, 3.0]`；
+- `depth_image`：形状 `(1, 1, 36, 64)`，近处为 1、远处为 0，可直接作为后续深度策略的输入布局。
+- `depth_points_world`：形状 `(N, 3)`，将有效深度按 `depth_pointcloud_stride` 下采样并反投影到 MuJoCo 世界坐标系，单位为米。
+
+OpenCV 窗口以白色表示近处、黑色表示远处，默认使用最近邻插值将 64×36 预览放大 4 倍至 256×144；MuJoCo 3D viewer 默认同时用红色球体显示深度点云。点云采用相机 `+X` 向右、`+Y` 向上、`-Z` 向前的坐标约定，并通过 `points_camera @ R_world_camera.T + camera_position` 转换到世界坐标。无命中或达到 `depth_max` 的像素不会生成点。
+
+可以分别通过 `depth_camera_display=False` 和 `depth_pointcloud_display=False` 关闭二维窗口或三维点云。若 OpenCV HighGUI 不可用，二维窗口会告警并自动关闭，三维点云与深度采集不受影响。深度入口始终需要可用的 MuJoCo OpenGL 渲染后端；仅关闭预览窗口时可使用 EGL 等离屏后端。相机通过 `MjSpec` 动态加入编译模型，不会修改原始 ZB02W MJCF。
+
 ## 轮子静止 PID
 
 RL 策略在停车时仍可能输出很小的非零轮速，单靠轮速度 PD 难以使轮子绝对静止。`MujocoDeployWl` 因此提供可选的停车 PID：保留策略原始轮速目标，并在接近静止时为每个轮子叠加一个以实际轮速为反馈的修正量。该修正是**目标轮速修正**，不是直接施加到 actuator 的力矩；修正后的目标仍由原有轮速度 PD 转换为力矩。
@@ -188,6 +206,7 @@ MujocoSimConfig
 │   └── Zb02wFlatConfig
 │       └── Zb02wRoughConfig
 │           └── Zb02wTsConfig
+│               └── Zb02wDepthConfig
 └── Wh044xConfig
 ```
 
@@ -201,6 +220,14 @@ Rough 和 TS 配置继承对应机器人的 Flat 配置，只声明有差异的�
 | `xml_path` | 机器人 MJCF 路径 |
 | `terrain_xml_path` | 可选地形 MJCF；rough 配置使用 |
 | `plotjuggler_enabled` | 是否启用可选 PlotJuggler UDP 遥测；轮足配置默认开启，其他配置默认关闭 |
+| `depth_camera_link`, `depth_camera_pos`, `depth_camera_quat` | 深度相机挂载 link、位置及训练端 `+X` 前向坐标约定下的 `wxyz` 姿态；初始化时自动转换到 MuJoCo 相机轴 |
+| `depth_camera_width`, `depth_camera_height`, `depth_camera_fovy` | 深度图分辨率及垂直视场角 |
+| `depth_camera_near` | 深度相机绝对近裁剪距离；初始化时按 `model.stat.extent` 换算为 MuJoCo `znear` |
+| `depth_camera_update_period`, `depth_min`, `depth_max` | 深度更新周期和有效距离范围 |
+| `depth_camera_display` | 是否用 OpenCV 实时显示近白远黑的深度图 |
+| `depth_camera_display_scale` | OpenCV 预览的最近邻整数放大倍数；默认为 `4` |
+| `depth_pointcloud_display` | 是否在 MuJoCo 3D viewer 中显示深度点云 |
+| `depth_pointcloud_stride`, `depth_pointcloud_radius` | 点云像素采样间隔和球形点半径；默认分别为 `1` 和 `0.01 m` |
 | `num_obs`, `num_obs_hist`, `num_actions` | 策略观测、历史和动作维度 |
 | `leg_joint_idx`, `wheel_joint_idx` | MuJoCo state 中的腿 / 轮关节索引 |
 | `leg_actions_to_mujoco`, `wheel_actions_to_mujoco` | 策略动作到 MuJoCo actuator 的映射 |
@@ -231,6 +258,7 @@ mujoco_sim/
 │   ├── zb02w_flat.py
 │   ├── zb02w_rough.py
 │   ├── zb02w_ts.py
+│   ├── zb02w_depth.py
 │   └── wh044x.py
 ├── robots/
 │   ├── M20_mjcf/              # M20 模型与 mesh

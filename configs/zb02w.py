@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -69,3 +70,28 @@ class Zb02wTsConfig(Zb02wRoughConfig):
     wheel_stop_pid_ki: float = 2.0
     wheel_stop_pid_kd: float = 0.00005
     wheel_stop_pid_output_limit: float = 20.0
+
+
+@dataclass(frozen=True, kw_only=True)
+class Zb02wDepthConfig(Zb02wTsConfig):
+    depth_camera_name: str = "depth_camera"
+    depth_camera_link: str = "base_link"
+    depth_camera_pos: tuple[float, float, float] = (0.375, 0.0175, 0.10225)
+    depth_camera_quat: tuple[float, float, float, float] = (
+        math.cos(0.5 * 45.0 * math.pi / 180.0),
+        0.0,
+        math.sin(0.5 * 45.0 * math.pi / 180.0),
+        0.0,
+    )
+    depth_camera_width: int = 64
+    depth_camera_height: int = 36
+    depth_camera_fovy: float = 47.83
+    depth_camera_near: float = 0.05
+    depth_camera_update_period: float = 1.0 / 60.0
+    depth_min: float = 0.05
+    depth_max: float = 3.0
+    depth_camera_display: bool = True
+    depth_camera_display_scale: int = 4
+    depth_pointcloud_display: bool = True
+    depth_pointcloud_stride: int = 1
+    depth_pointcloud_radius: float = 0.01

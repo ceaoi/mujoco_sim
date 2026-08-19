@@ -1,7 +1,12 @@
 from .base import MUJOCO_SIM_ROOT, PROJECT_ROOT, MujocoSimConfig, WheelLeggedConfig
 from .m20 import M20FlatConfig, M20RoughConfig
 from .wh044x import Wh044xConfig
-from .zb02w import Zb02wFlatConfig, Zb02wRoughConfig, Zb02wTsConfig
+from .zb02w import (
+    Zb02wDepthConfig,
+    Zb02wFlatConfig,
+    Zb02wRoughConfig,
+    Zb02wTsConfig,
+)
 
 
 __all__ = [
@@ -14,5 +19,6 @@ __all__ = [
     "Zb02wFlatConfig",
     "Zb02wRoughConfig",
     "Zb02wTsConfig",
+    "Zb02wDepthConfig",
     "Wh044xConfig",
 ]
