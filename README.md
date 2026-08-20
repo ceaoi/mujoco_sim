@@ -146,14 +146,14 @@ config = M20FlatConfig(plotjuggler_enabled=False)
 
 ## ZB02W 深度相机
 
-`zb02w_depth` 继承 `zb02w_ts` 的本体观测、student ONNX 推理和停车 PID，同时使用 MuJoCo 固定相机采集深度。当前 student ONNX 只有 53 维本体观测和 RNN 状态输入，因此深度图不会输入策略，只暴露给调试和后续策略接入。
+`zb02w_depth` 继承 `zb02w_ts` 的本体观测、student ONNX 推理和停车 PID，同时使用 MuJoCo 固定相机采集深度。student ONNX 每个控制步接收 `policy_obs (1, 53)`、最近一次采集的 `depth_image (1, 1, 36, 64)` 以及 `h_in/c_in (3, 1, 256)`，并把输出的 `h_out/c_out` 作为下一步循环状态。
 
 默认相机固定在 `base_link`，相对位置为 `(0.375, 0.0175, 0.10225) m`，以 60 Hz 输出 64×36 深度图；垂直 FOV 为 47.83°，有效范围为 0.05–3.0 m，绝对近裁剪距离为 0.05 m。`depth_camera_quat` 使用训练端的 `wxyz` 姿态约定，其中 `+X` 为前向、`+Z` 为上方；模型初始化时会自动复合固定轴对齐，将 MuJoCo/OpenGL 相机的本地 `-Z` 观察轴对齐到训练端 `+X`。因此配置中的纯 `+Y` pitch 45° 最终会让相机朝机器人前方并向下 45°。
 
 运行时提供两个数组：
 
-- `depth_image_metric`：形状 `(36, 64)`，单位为米并裁剪到 `[0.05, 3.0]`；
-- `depth_image`：形状 `(1, 1, 36, 64)`，近处为 1、远处为 0，可直接作为后续深度策略的输入布局。
+- `depth_image_metric`：形状 `(36, 64)`，单位为米并裁剪到 `[0.3, 3.0]`；
+- `depth_image`：形状 `(1, 1, 36, 64)`，近处为 1、远处为 0，直接输入 student ONNX 的深度编码器。
 - `depth_points_world`：形状 `(N, 3)`，将有效深度按 `depth_pointcloud_stride` 下采样并反投影到 MuJoCo 世界坐标系，单位为米。
 
 Matplotlib 窗口使用 `turbo` 伪彩色显示近远变化，默认以 10 Hz 刷新，并通过最近邻插值将 64×36 预览放大 4 倍至 256×144；颜色映射仍使用完整的 `depth_min`–`depth_max` 范围，不改变深度数据。二维预览的刷新周期独立于默认 60 Hz 的深度采集。MuJoCo 3D viewer 默认同时用红色球体显示深度点云。点云采用相机 `+X` 向右、`+Y` 向上、`-Z` 向前的坐标约定，并通过 `points_camera @ R_world_camera.T + camera_position` 转换到世界坐标。无命中或达到 `depth_max` 的像素不会生成点。

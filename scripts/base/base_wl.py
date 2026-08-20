@@ -91,12 +91,46 @@ class MujocoDeployWl(MujocoDeploy):
         self.policy_output_name = self.policy.get_outputs()[0].name
 
         if self.is_rnn:
-            h_input = self.policy.get_inputs()[1]
-            h_shape = h_input.shape
-            self.rnn_num_layers = int(h_shape[0])
-            self.rnn_hidden_size = int(h_shape[2])
-            self.h_in = np.zeros((self.rnn_num_layers, 1, self.rnn_hidden_size), dtype=np.float32)
-            self.c_in = np.zeros((self.rnn_num_layers, 1, self.rnn_hidden_size), dtype=np.float32)
+            policy_inputs = {item.name: item for item in self.policy.get_inputs()}
+            missing_state_inputs = [
+                name for name in ("h_in", "c_in") if name not in policy_inputs
+            ]
+            if missing_state_inputs:
+                raise ValueError(
+                    "RNN policy is missing required recurrent inputs: "
+                    f"{missing_state_inputs}; available inputs: {self.policy_input_names}"
+                )
+
+            h_shape = self._concrete_recurrent_state_shape(
+                policy_inputs["h_in"].shape,
+                "h_in",
+            )
+            c_shape = self._concrete_recurrent_state_shape(
+                policy_inputs["c_in"].shape,
+                "c_in",
+            )
+            if c_shape != h_shape:
+                raise ValueError(
+                    "RNN policy h_in and c_in shapes must match, got "
+                    f"{h_shape} and {c_shape}"
+                )
+
+            self.rnn_num_layers = h_shape[0]
+            self.rnn_hidden_size = h_shape[2]
+            self.h_in = np.zeros(h_shape, dtype=np.float32)
+            self.c_in = np.zeros(c_shape, dtype=np.float32)
+
+    @staticmethod
+    def _concrete_recurrent_state_shape(shape, input_name):
+        if len(shape) != 3 or any(
+            isinstance(dim, bool) or not isinstance(dim, (int, np.integer)) or dim <= 0
+            for dim in shape
+        ):
+            raise ValueError(
+                f"RNN policy input {input_name!r} must have a fixed, positive 3D "
+                f"shape, got {shape}"
+            )
+        return tuple(int(dim) for dim in shape)
 
     def _reset_control(self):
         self.targ_dof_pos = self.default_angles.copy()
@@ -117,17 +151,16 @@ class MujocoDeployWl(MujocoDeploy):
         if self.is_rnn:
             action, h_out, c_out = self.policy.run(
                 [self.policy_output_name, "h_out", "c_out"],
-                {
-                    self.policy_input_name: inp,
-                    "h_in": self.h_in,
-                    "c_in": self.c_in,
-                }
+                self._build_policy_inputs(inp),
             )
             self.action = np.asarray(action, dtype=np.float32).squeeze()
             self.h_in = np.asarray(h_out, dtype=np.float32)
             self.c_in = np.asarray(c_out, dtype=np.float32)
         else:
-            action = self.policy.run([self.policy_output_name], {self.policy_input_name: inp})[0]
+            action = self.policy.run(
+                [self.policy_output_name],
+                self._build_policy_inputs(inp),
+            )[0]
             self.action = np.asarray(action, dtype=np.float32).squeeze()
 
         self.send_plotjuggler_data("actions", self.action)
@@ -167,6 +200,18 @@ class MujocoDeployWl(MujocoDeploy):
             self.wheel_stop_pid_integral[:] = 0.0
             self.wheel_stop_pid_previous_error[:] = 0.0
             self.wheel_stop_pid_active = False
+
+    def _build_policy_inputs(self, policy_obs):
+        inputs = {
+            self.policy_input_name: np.ascontiguousarray(
+                policy_obs,
+                dtype=np.float32,
+            )
+        }
+        if self.is_rnn:
+            inputs["h_in"] = np.ascontiguousarray(self.h_in, dtype=np.float32)
+            inputs["c_in"] = np.ascontiguousarray(self.c_in, dtype=np.float32)
+        return inputs
 
     def update_tau(self):
         self.tau[self.leg_actions_to_mujoco] = pd_ctrl(

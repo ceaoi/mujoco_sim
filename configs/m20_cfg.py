@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from .base import MUJOCO_SIM_ROOT, PROJECT_ROOT, WheelLeggedConfig
+from .base_cfg import MUJOCO_SIM_ROOT, PROJECT_ROOT, WheelLeggedConfig
 
 
 @dataclass(frozen=True, kw_only=True)

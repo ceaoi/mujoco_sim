@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from .base import PROJECT_ROOT, MujocoSimConfig
+from .base_cfg import PROJECT_ROOT, MujocoSimConfig
 
 
 @dataclass(frozen=True, kw_only=True)

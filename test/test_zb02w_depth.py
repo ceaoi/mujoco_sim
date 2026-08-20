@@ -26,6 +26,68 @@ MINIMAL_MJCF = """
 """
 
 
+class _FakeStudentPolicy:
+
+    def __init__(self, *, depth_shape=(1, 1, 36, 64)):
+        self.inputs = [
+            SimpleNamespace(
+                name="policy_obs",
+                shape=[1, 53],
+                type="tensor(float)",
+            ),
+            SimpleNamespace(
+                name="depth_image",
+                shape=list(depth_shape),
+                type="tensor(float)",
+            ),
+            SimpleNamespace(
+                name="h_in",
+                shape=[3, 1, 256],
+                type="tensor(float)",
+            ),
+            SimpleNamespace(
+                name="c_in",
+                shape=[3, 1, 256],
+                type="tensor(float)",
+            ),
+        ]
+        self.outputs = [
+            SimpleNamespace(
+                name="actions",
+                shape=[1, 16],
+                type="tensor(float)",
+            ),
+            SimpleNamespace(
+                name="h_out",
+                shape=[3, 1, 256],
+                type="tensor(float)",
+            ),
+            SimpleNamespace(
+                name="c_out",
+                shape=[3, 1, 256],
+                type="tensor(float)",
+            ),
+        ]
+        self.run_calls = []
+
+    def get_inputs(self):
+        return self.inputs
+
+    def get_outputs(self):
+        return self.outputs
+
+    def run(self, output_names, inputs):
+        copied_inputs = {
+            name: np.array(value, copy=True) for name, value in inputs.items()
+        }
+        self.run_calls.append((list(output_names), copied_inputs))
+        return [
+            np.arange(16, dtype=np.float32)[None, :],
+            copied_inputs["h_in"] + 1.0,
+            copied_inputs["c_in"] + 2.0,
+        ]
+
+
 def _bare_deploy(**config_overrides):
     deploy = object.__new__(Zb02wDepthDeploy)
     config_kwargs = {
@@ -39,6 +101,74 @@ def _bare_deploy(**config_overrides):
     deploy._depth_image_artist = None
     deploy._next_depth_display_update_time = 0.0
     return deploy
+
+
+def _bare_policy_deploy(policy):
+    deploy = object.__new__(Zb02wDepthDeploy)
+    deploy.config = Zb02wDepthConfig(
+        plotjuggler_enabled=False,
+        depth_camera_display=False,
+        depth_pointcloud_display=False,
+    )
+    deploy.ctrl_dt = 0.02
+    deploy._make_onnx_session = lambda _: policy
+    deploy._init_control()
+    deploy._validate_student_policy_signature()
+    deploy.plotjuggler_enabled = False
+    deploy.plotjuggler = None
+    deploy.model_in = np.arange(53, dtype=np.float32)[::-1]
+    full_depth = np.arange(36 * 128, dtype=np.float32).reshape(1, 1, 36, 128)
+    deploy.depth_image = full_depth[..., ::2]
+    deploy.data = SimpleNamespace(qvel=np.zeros(22, dtype=np.float32))
+    deploy.cmd = np.zeros(3, dtype=np.float32)
+    return deploy
+
+
+def test_student_policy_uses_named_state_shapes_and_all_four_inputs():
+    policy = _FakeStudentPolicy()
+    deploy = _bare_policy_deploy(policy)
+    deploy.h_in.fill(2.0)
+    deploy.c_in.fill(3.0)
+
+    assert deploy.h_in.shape == (3, 1, 256)
+    assert deploy.c_in.shape == (3, 1, 256)
+    assert not deploy.model_in.flags.c_contiguous
+    assert not deploy.depth_image.flags.c_contiguous
+
+    deploy.update_action()
+
+    assert len(policy.run_calls) == 1
+    output_names, inputs = policy.run_calls[0]
+    assert output_names == ["actions", "h_out", "c_out"]
+    assert list(inputs) == ["policy_obs", "depth_image", "h_in", "c_in"]
+    assert inputs["policy_obs"].shape == (1, 53)
+    assert inputs["depth_image"].shape == (1, 1, 36, 64)
+    assert inputs["h_in"].shape == (3, 1, 256)
+    assert inputs["c_in"].shape == (3, 1, 256)
+    for value in inputs.values():
+        assert value.dtype == np.float32
+        assert value.flags.c_contiguous
+    np.testing.assert_array_equal(inputs["policy_obs"][0], deploy.model_in)
+    np.testing.assert_array_equal(inputs["depth_image"], deploy.depth_image)
+    np.testing.assert_array_equal(inputs["h_in"], np.full((3, 1, 256), 2.0))
+    np.testing.assert_array_equal(inputs["c_in"], np.full((3, 1, 256), 3.0))
+    np.testing.assert_array_equal(deploy.action, np.arange(16, dtype=np.float32))
+    np.testing.assert_array_equal(deploy.h_in, np.full((3, 1, 256), 3.0))
+    np.testing.assert_array_equal(deploy.c_in, np.full((3, 1, 256), 5.0))
+
+    deploy._reset_control()
+
+    np.testing.assert_array_equal(deploy.h_in, np.zeros((3, 1, 256)))
+    np.testing.assert_array_equal(deploy.c_in, np.zeros((3, 1, 256)))
+
+
+def test_student_policy_signature_rejects_wrong_depth_shape():
+    policy = _FakeStudentPolicy(depth_shape=(1, 1, 18, 64))
+    deploy = object.__new__(Zb02wDepthDeploy)
+    deploy.policy = policy
+
+    with pytest.raises(ValueError, match="depth_image.*must have shape"):
+        deploy._validate_student_policy_signature()
 
 
 def test_load_model_attaches_camera_to_requested_body(tmp_path):

@@ -2,7 +2,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
-from .base import MUJOCO_SIM_ROOT, PROJECT_ROOT, WheelLeggedConfig
+from .base_cfg import MUJOCO_SIM_ROOT, PROJECT_ROOT, WheelLeggedConfig
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -74,6 +74,7 @@ class Zb02wTsConfig(Zb02wRoughConfig):
 
 @dataclass(frozen=True, kw_only=True)
 class Zb02wDepthConfig(Zb02wTsConfig):
+    policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/zb02w_student/1_exported/policy.onnx"
     depth_camera_name: str = "depth_camera"
     depth_camera_link: str = "base_link"
     depth_camera_pos: tuple[float, float, float] = (0.375, 0.0175, 0.10225)
@@ -88,7 +89,7 @@ class Zb02wDepthConfig(Zb02wTsConfig):
     depth_camera_fovy: float = 47.83
     depth_camera_near: float = 0.05
     depth_camera_update_period: float = 1.0 / 60.0
-    depth_min: float = 0.05
+    depth_min: float = 0.3
     depth_max: float = 3.0
     depth_camera_display: bool = True
     depth_camera_display_update_period: float = 1.0 / 10.0

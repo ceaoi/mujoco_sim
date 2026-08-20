@@ -1,7 +1,7 @@
-from .base import MUJOCO_SIM_ROOT, PROJECT_ROOT, MujocoSimConfig, WheelLeggedConfig
-from .m20 import M20FlatConfig, M20RoughConfig
-from .wh044x import Wh044xConfig
-from .zb02w import (
+from .base_cfg import MUJOCO_SIM_ROOT, PROJECT_ROOT, MujocoSimConfig, WheelLeggedConfig
+from .m20_cfg import M20FlatConfig, M20RoughConfig
+from .wh044x_cfg import Wh044xConfig
+from .zb02w_cfg import (
     Zb02wDepthConfig,
     Zb02wFlatConfig,
     Zb02wRoughConfig,

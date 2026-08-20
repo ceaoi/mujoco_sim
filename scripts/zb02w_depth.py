@@ -19,12 +19,24 @@ CAMERA_FRAME_ALIGNMENT_QUAT = np.array(
 )
 POINTCLOUD_RGBA = np.array([1.0, 0.0, 0.0, 1.0], dtype=np.float32)
 POINTCLOUD_ROTATION = np.eye(3, dtype=np.float64).reshape(-1)
+STUDENT_ONNX_INPUT_SHAPES = {
+    "policy_obs": (1, 53),
+    "depth_image": (1, 1, 36, 64),
+    "h_in": (3, 1, 256),
+    "c_in": (3, 1, 256),
+}
+STUDENT_ONNX_OUTPUT_SHAPES = {
+    "actions": (1, 16),
+    "h_out": (3, 1, 256),
+    "c_out": (3, 1, 256),
+}
 
 
 class Zb02wDepthDeploy(Zb02wRoughDeploy):
 
     def __init__(self, config: Zb02wDepthConfig, device="cpu"):
         super().__init__(config, device)
+        self._validate_student_policy_signature()
         self._depth_renderer = self._create_depth_renderer()
         self._depth_renderer.enable_depth_rendering()
 
@@ -51,6 +63,50 @@ class Zb02wDepthDeploy(Zb02wRoughDeploy):
             raise RuntimeError(
                 f"Compiled depth camera not found: {config.depth_camera_name!r}"
             )
+
+    def _validate_student_policy_signature(self) -> None:
+        self._validate_onnx_values(
+            self.policy.get_inputs(),
+            STUDENT_ONNX_INPUT_SHAPES,
+            "input",
+        )
+        self._validate_onnx_values(
+            self.policy.get_outputs(),
+            STUDENT_ONNX_OUTPUT_SHAPES,
+            "output",
+        )
+
+    @staticmethod
+    def _validate_onnx_values(values, expected_shapes, value_kind) -> None:
+        actual_names = [value.name for value in values]
+        expected_names = list(expected_shapes)
+        if actual_names != expected_names:
+            raise ValueError(
+                f"Student ONNX {value_kind} names must be {expected_names}, "
+                f"got {actual_names}"
+            )
+
+        for value in values:
+            actual_shape = tuple(value.shape)
+            expected_shape = expected_shapes[value.name]
+            if actual_shape != expected_shape:
+                raise ValueError(
+                    f"Student ONNX {value_kind} {value.name!r} must have shape "
+                    f"{expected_shape}, got {actual_shape}"
+                )
+            if value.type != "tensor(float)":
+                raise ValueError(
+                    f"Student ONNX {value_kind} {value.name!r} must use "
+                    f"tensor(float), got {value.type!r}"
+                )
+
+    def _build_policy_inputs(self, policy_obs):
+        inputs = super()._build_policy_inputs(policy_obs)
+        inputs["depth_image"] = self.depth_image
+        return {
+            name: np.ascontiguousarray(inputs[name], dtype=np.float32)
+            for name in self.policy_input_names
+        }
 
     def _load_model(self, merged_xml_path: str) -> mujoco.MjModel:
         config = self.config
@@ -334,10 +390,10 @@ class Zb02wDepthDeploy(Zb02wRoughDeploy):
             if self._depth_figure is None:
                 self._create_depth_window()
             else:
-                self._depth_image_artist.set_data(self.depth_image[0, 0])
+                self._depth_image_artist.set_data(self.depth_image[0, 0]) # type: ignore
 
-            self._depth_figure.canvas.draw_idle()
-            self._depth_figure.canvas.flush_events()
+            self._depth_figure.canvas.draw_idle() # type: ignore
+            self._depth_figure.canvas.flush_events() # type: ignore
         except Exception as exc:
             self.depth_camera_display_enabled = False
             self._close_depth_window()
