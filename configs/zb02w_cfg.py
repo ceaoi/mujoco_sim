@@ -75,6 +75,8 @@ class Zb02wTsConfig(Zb02wRoughConfig):
 @dataclass(frozen=True, kw_only=True)
 class Zb02wDepthConfig(Zb02wTsConfig):
     policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/zb02w_student/1_exported/policy.onnx"
+    cmd_range: tuple[float, ...] = (3.0, 1.5, 1.5)
+
     depth_camera_name: str = "depth_camera"
     depth_camera_link: str = "base_link"
     depth_camera_pos: tuple[float, float, float] = (0.375, 0.0175, 0.10225)
