@@ -51,6 +51,13 @@ class Zb02wFlatConfig(WheelLeggedConfig):
 
 
 @dataclass(frozen=True, kw_only=True)
+class Zb02wGyrateConfig(Zb02wFlatConfig):
+    policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/gyrate/1_exported/policy.onnx"
+    num_obs: int = 50
+    is_rnn: bool = False
+
+
+@dataclass(frozen=True, kw_only=True)
 class Zb02wRoughConfig(Zb02wFlatConfig):
     policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/zb02w_rough/1_exported/policy.onnx"
     terrain_xml_path: Path | None = MUJOCO_SIM_ROOT / "assets/terrains/rough_stairs.xml"

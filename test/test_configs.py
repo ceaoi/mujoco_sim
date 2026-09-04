@@ -15,6 +15,7 @@ from mujoco_sim.configs import (
     WheelLeggedConfig,
     Zb02wFlatConfig,
     Zb02wDepthConfig,
+    Zb02wGyrateConfig,
     Zb02wRoughConfig,
     Zb02wTsConfig,
 )
@@ -65,6 +66,20 @@ def test_zb02w_rough_and_student_configs_inherit_expected_values():
     assert flat.plotjuggler_enabled
     assert rough.plotjuggler_enabled
     assert student.plotjuggler_enabled
+
+
+def test_zb02w_gyrate_config_uses_feedforward_policy_and_actor_observation_size():
+    flat = Zb02wFlatConfig()
+    gyrate = Zb02wGyrateConfig()
+
+    assert isinstance(gyrate, Zb02wFlatConfig)
+    assert gyrate.policy_path == PROJECT_ROOT / "logs/rsl_rl/gyrate/1_exported/policy.onnx"
+    assert gyrate.policy_path.is_absolute()
+    assert gyrate.num_obs == 50
+    assert gyrate.num_actions == 16
+    assert not gyrate.is_rnn
+    assert gyrate.xml_path == flat.xml_path
+    assert gyrate.terrain_xml_path is None
 
 
 def test_zb02w_depth_config_inherits_student_policy_and_camera_defaults():

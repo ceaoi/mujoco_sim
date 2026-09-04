@@ -1,6 +1,6 @@
 # MuJoCo Sim
 
-`mujoco_sim` 用于把训练得到的 ONNX 运动策略部署到 MuJoCo，并通过 Xbox 类手柄实时控制机器人。当前包含 M20、ZB02W 两类轮足机器人，以及 WH044X 四轮转向底盘；M20 和 ZB02W 均提供平地、粗糙地形入口，ZB02W 还提供 student 策略和深度相机入口。
+`mujoco_sim` 用于把训练得到的 ONNX 运动策略部署到 MuJoCo，并通过 Xbox 类手柄实时控制机器人。当前包含 M20、ZB02W 两类轮足机器人，以及 WH044X 四轮转向底盘；M20 和 ZB02W 均提供平地、粗糙地形入口，ZB02W 还提供多模式 GRU MoE、student 策略和深度相机入口。
 
 仿真启动时会把机器人模型、弹丸模型以及可选地形合并成 `tmp_merged.xml`，随后以 MuJoCo 仿真步长运行。控制器每隔 `control_decimation` 个仿真步更新一次；当前入口的控制周期均为 20 ms（50 Hz）。
 
@@ -12,6 +12,7 @@
 | `m20_rough` | M20 / 台阶地形 | `M20RoughConfig` | RNN ONNX 策略；额外合并 `rough_stairs.xml` |
 | `zb02w_flat` | ZB02W / 平地 | `Zb02wFlatConfig` | RNN ONNX 策略；腿位置 PD + 轮速度 PD |
 | `zb02w_rough` | ZB02W / 台阶地形 | `Zb02wRoughConfig` | RNN ONNX 策略；额外合并 `rough_stairs.xml` |
+| `zb02w_gyrate` | ZB02W / 平地多模式 | `Zb02wGyrateConfig` | GRU 编码的 residual MoE 策略；X / Y / B 选择 mode |
 | `zb02w_ts` | ZB02W / 台阶地形 | `Zb02wTsConfig` | student RNN ONNX 策略；启用轮子静止 PID |
 | `zb02w_depth` | ZB02W / 台阶地形 | `Zb02wDepthConfig` | TS 控制逻辑；固定式 64×36 深度相机和 Matplotlib 预览 |
 | `wh044x` | WH044X / 平地 | `Wh044xConfig` | C++ `chassis` 运动学解算；直接写入转向和轮速 actuator control |
@@ -64,6 +65,7 @@ python mujoco_sim/run_script.py --filename=m20_rough
 # ZB02W
 python mujoco_sim/run_script.py --filename=zb02w_flat
 python mujoco_sim/run_script.py --filename=zb02w_rough
+python mujoco_sim/run_script.py --filename=zb02w_gyrate
 python mujoco_sim/run_script.py --filename=zb02w_ts
 python mujoco_sim/run_script.py --filename=zb02w_depth
 
@@ -108,6 +110,9 @@ HUD 以固定 20 Hz 刷新，数值保留三位小数；相机和 viewer 画面�
 | L2 | 重置仿真和控制器状态 |
 | R2 | 切换跟随 / 固定相机 |
 | A | 从机器人周围生成一个以 6 m/s 撞向机体的弹丸 |
+| X | 仅 `zb02w_gyrate`：选择 mode 0（still） |
+| Y | 仅 `zb02w_gyrate`：选择 mode 1（gyrate） |
+| B | 仅 `zb02w_gyrate`：选择 mode 2（upright） |
 | R1 | 仅 WH044X：在 3 个 chassis 模式间循环切换 |
 
 实际速度范围由对应配置的 `cmd_range` 决定。M20 和 ZB02W 还会按 `max_command_rate` 对指令变化率限幅。
@@ -130,7 +135,29 @@ run_script.py
 
 - `MujocoDeploy`：接收 `MujocoSimConfig` 配置对象，统一管理可选 PlotJuggler 发送器，并负责合并 XML、创建 MuJoCo model/data、处理手柄、相机、重置、弹丸和实时仿真循环。
 - `MujocoDeployWl`：使用 ONNX Runtime 的 CPU provider 推理，支持普通策略和带 `h_in/c_in` 的 RNN 策略，并把 16 维动作拆分为 12 个腿关节位置目标和 4 个轮关节速度目标。
+- `Zb02wGyrateDeploy`：在 50 维 policy 观测后拼接 mode one-hot，并单独维护 GRU 的 `h_in/h_out`；不使用通用基类面向 LSTM 的 `h_in/c_in` 路径。
 - `MujocoDeployWh`：轻量扩展点；WH044X 的底盘模式切换和运动学控制实现在 `scripts/wh044x.py`。
+
+## ZB02W 多模式 GRU MoE 策略
+
+`zb02w_gyrate` 默认加载 `logs/rsl_rl/gyrate/1_exported/policy.onnx`。当前导出模型采用固定 batch size 1，ONNX 接口如下：
+
+| 类型 | 名称 | 形状 | 说明 |
+|---|---|---|---|
+| 输入 | `obs` | `(1, 53)` | 50 维 policy 观测后拼接 3 维 mode one-hot |
+| 输入 | `h_in` | `(1, 1, 256)` | 单层 GRU encoder 的 hidden state |
+| 输出 | `actions` | `(1, 16)` | 12 个腿关节动作和 4 个轮子动作 |
+| 输出 | `h_out` | `(1, 1, 256)` | 下一控制步使用的 GRU hidden state |
+
+mode one-hot 的顺序与训练端一致：
+
+| mode | 按键 | one-hot | 含义 |
+|---|---|---|---|
+| 0 | X | `[1, 0, 0]` | still |
+| 1 | Y | `[0, 1, 0]` | gyrate |
+| 2 | B | `[0, 0, 1]` | upright |
+
+启动和仿真重置后 mode 均为 0。按键使用上升沿切换，松开后会保持当前 mode，直到按下另一个模式键；切换 mode 不会清空 GRU hidden state。仿真重置会同时把 mode 恢复为 0，并把 hidden state 清零。
 
 ## PlotJuggler 遥测
 
@@ -204,6 +231,7 @@ MujocoSimConfig
 │   ├── M20FlatConfig
 │   │   └── M20RoughConfig
 │   └── Zb02wFlatConfig
+│       ├── Zb02wGyrateConfig
 │       └── Zb02wRoughConfig
 │           └── Zb02wTsConfig
 │               └── Zb02wDepthConfig
@@ -239,7 +267,7 @@ Rough 和 TS 配置继承对应机器人的 Flat 配置，只声明有差异的�
 | `wheel_stop_pid_enabled` | 是否启用接近静止时的轮速 PID 修正；未配置时为 `false` |
 | `wheel_stop_pid_kp`, `wheel_stop_pid_ki`, `wheel_stop_pid_kd` | 轮子静止 PID 的比例、积分和微分增益；未配置时为 `0.0` |
 | `wheel_stop_pid_output_limit` | 单个轮子的 PID 目标轮速修正绝对值上限，必须大于 0；未配置时为 `5.0` |
-| `is_rnn` | 是否按 RNN 接口传入并维护隐藏状态 |
+| `is_rnn` | 是否由通用 `MujocoDeployWl` 按 `h_in/c_in` RNN 接口维护隐藏状态；`zb02w_gyrate` 的 h-only GRU 由入口脚本管理，因此该配置为 `false` |
 
 部署时，观测的顺序、缩放、关节排列和动作缩放必须与训练端完全一致；修改这些字段前应同时核对训练配置和导出的 ONNX 输入 / 输出。
 
@@ -258,6 +286,7 @@ mujoco_sim/
 │   ├── m20_rough.py
 │   ├── zb02w_flat.py
 │   ├── zb02w_rough.py
+│   ├── zb02w_gyrate.py
 │   ├── zb02w_ts.py
 │   ├── zb02w_depth.py
 │   └── wh044x.py
