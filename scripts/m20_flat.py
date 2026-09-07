@@ -9,17 +9,9 @@ class M20FlatDeploy(MujocoDeployWl):
     def __init__(self, config: M20FlatConfig, device="cpu"):
         super().__init__(config, device)
         self.gait = GaitPhaseGenerator(config)
-        self.max_delta_cmd = np.array(config.max_command_rate, dtype=np.float32) * self.ctrl_dt
 
     def update_model_in(self):
         self.model_in = self.obs
-
-    def update_cmd(self):
-        cmd = np.asarray(self.gamepad.get_cmd(), dtype=np.float32) * self.cmd_range
-        self.cmd += np.clip(cmd - self.cmd, -self.max_delta_cmd, self.max_delta_cmd)
-        self.cmd[0] = 0.0 if abs(self.cmd[0]) < self.cmd_deadzone[0] else self.cmd[0]
-        self.cmd[1] = 0.0 if abs(self.cmd[1]) < self.cmd_deadzone[1] else self.cmd[1]
-        self.cmd[2] = 0.0 if abs(self.cmd[2]) < self.cmd_deadzone[2] else self.cmd[2]
 
     def update_obs(self):
         base_quat = self.data.qpos[3:7].copy()  # MuJoCo freejoint quat: [w, x, y, z]

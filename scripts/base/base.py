@@ -95,6 +95,9 @@ class MujocoDeploy:
         ) = _find_default_base_free_joint(self.robot)
         self.robot.opt.timestep = self.sim_dt
         self.ctrl_dt = self.sim_dt * self.control_decimation
+        self.max_delta_cmd = (
+            np.asarray(config.max_command_rate, dtype=np.float32) * self.ctrl_dt
+        )
         self._base_hud_update_interval = max(
             1,
             round(1.0 / (BASE_HUD_UPDATE_HZ * self.robot.opt.timestep)),
@@ -244,10 +247,18 @@ class MujocoDeploy:
         self.counter += 1
 
     def update_cmd(self):
-        self.cmd = np.asarray(self.gamepad.get_cmd(), dtype=np.float32) * self.cmd_range
-        self.cmd[0] = 0.0 if abs(self.cmd[0]) < self.cmd_deadzone[0] else self.cmd[0]
-        self.cmd[1] = 0.0 if abs(self.cmd[1]) < self.cmd_deadzone[1] else self.cmd[1]
-        self.cmd[2] = 0.0 if abs(self.cmd[2]) < self.cmd_deadzone[2] else self.cmd[2]
+        target_cmd = (
+            np.asarray(self.gamepad.get_cmd(), dtype=np.float32) * self.cmd_range
+        )
+        target_cmd = np.sign(target_cmd) * np.maximum(
+            np.abs(target_cmd) - self.cmd_deadzone,
+            0.0,
+        )
+        self.cmd += np.clip(
+            target_cmd - self.cmd,
+            -self.max_delta_cmd,
+            self.max_delta_cmd,
+        )
 
     # ---- viewer ----
 

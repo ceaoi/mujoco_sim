@@ -22,6 +22,7 @@ class MujocoSimConfig:
     cmd_range: FloatTuple
     cmd_deadzone: FloatTuple
     cmd_init: FloatTuple = (0.0, 0.0, 0.0)
+    max_command_rate: FloatTuple = (float("inf"),) * 3
     terrain_xml_path: Path | None = None
     plotjuggler_enabled: bool = False
 
@@ -41,7 +42,6 @@ class WheelLeggedConfig(MujocoSimConfig):
     kpsVel: FloatTuple
     kdsVel: FloatTuple
     default_angles_leg: FloatTuple
-    max_command_rate: FloatTuple
     action_scale_pos: float
     action_scale_vel: float
     num_actions_pos: int
