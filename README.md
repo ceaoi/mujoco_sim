@@ -119,6 +119,38 @@ HUD 以固定 20 Hz 刷新，数值保留三位小数；相机和 viewer 画面�
 
 默认 pygame 映射位于 `utils/gamepad_pygame.py`。不同手柄或操作系统的轴编号可能不同，需要调整 `axis_map` / `button_map`。
 
+### SSH 远程手柄
+
+远程手柄使用 TCP 端口 `5555`：本地电脑读取物理手柄并作为客户端发送状态，远端仿真中的 `VirtualGamepad` 只监听回环地址。先把目标入口创建配置的代码改为启用远程手柄：
+
+```python
+config = Zb02wRoughConfig(remote_gamepad_enabled=True)
+deploy = Zb02wRoughDeploy(config)
+```
+
+然后在本地建立 SSH 隧道，并在打开的远端 shell 中启动仿真：
+
+```bash
+ssh \
+    -L 5555:127.0.0.1:5555 \
+    -L 8080:127.0.0.1:8080 \
+    user@server
+
+python mujoco_sim/run_script.py --filename=zb02w_rough
+```
+
+最后在本地另一个终端启动手柄发送端：
+
+```bash
+python -m mujoco_sim.utils.remote_gamepad \
+    --host 127.0.0.1 \
+    --port 5555 \
+    --index 0 \
+    --hz 50
+```
+
+发送内容是完整手柄状态，不仅包含三维速度指令，还包含 L2/R2、A/B/X/Y、L1/R1，因此重置、相机、弹丸、gyrate mode 和 WH044X chassis mode 均可远程操作。TCP 断开时远端会保持最后收到的状态并等待客户端重连，不会自动归零；运动中的机器人可能因此继续运动。`8080` 仅为其他远程界面或视频服务预留，本模块不监听或使用该端口。
+
 ## 核心流程
 
 ```text
@@ -264,6 +296,8 @@ Rough 和 TS 配置继承对应机器人的 Flat 配置，只声明有差异的�
 | `action_scale_pos`, `action_scale_vel` | 策略动作到目标位置 / 速度的缩放 |
 | `cmd_range`, `cmd_deadzone` | 手柄速度范围与死区 |
 | `max_command_rate` | M20 / ZB02W 指令变化率上限 |
+| `remote_gamepad_enabled` | 是否使用通过 TCP 接收状态的虚拟手柄；默认关闭 |
+| `remote_gamepad_host`, `remote_gamepad_port` | 虚拟手柄监听地址和端口；默认 `127.0.0.1:5555` |
 | `wheel_stop_pid_enabled` | 是否启用接近静止时的轮速 PID 修正；未配置时为 `false` |
 | `wheel_stop_pid_kp`, `wheel_stop_pid_ki`, `wheel_stop_pid_kd` | 轮子静止 PID 的比例、积分和微分增益；未配置时为 `0.0` |
 | `wheel_stop_pid_output_limit` | 单个轮子的 PID 目标轮速修正绝对值上限，必须大于 0；未配置时为 `5.0` |
@@ -298,6 +332,7 @@ mujoco_sim/
 │   ├── deploy_func.py         # 四元数和 PD 工具
 │   ├── gait_generator.py      # 步态相位生成器
 │   ├── gamepad_pygame.py      # pygame 手柄封装与诊断入口
+│   ├── remote_gamepad.py      # SSH/TCP 手柄发送端与虚拟手柄
 │   ├── projectile.py          # 弹丸管理器
 │   └── urdf2xml.py            # URDF → MJCF 转换工具
 └── test/                      # 调试脚本与 notebook（部分依赖旧工程路径）

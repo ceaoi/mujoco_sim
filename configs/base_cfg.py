@@ -23,6 +23,9 @@ class MujocoSimConfig:
     cmd_deadzone: FloatTuple
     cmd_init: FloatTuple = (0.0, 0.0, 0.0)
     max_command_rate: FloatTuple = (float("inf"),) * 3
+    remote_gamepad_enabled: bool = False
+    remote_gamepad_host: str = "127.0.0.1"
+    remote_gamepad_port: int = 5555
     terrain_xml_path: Path | None = None
     plotjuggler_enabled: bool = False
 

@@ -14,6 +14,7 @@ from pathlib import Path
 from mujoco_sim.configs import MujocoSimConfig
 from mujoco_sim.utils.gamepad_pygame import Gamepad
 from mujoco_sim.utils.projectile import ProjectileManager
+from mujoco_sim.utils.remote_gamepad import VirtualGamepad
 
 
 BASE_HUD_UPDATE_HZ = 20.0
@@ -103,8 +104,7 @@ class MujocoDeploy:
             round(1.0 / (BASE_HUD_UPDATE_HZ * self.robot.opt.timestep)),
         )
 
-        self.gamepad = Gamepad(joystick_index=0)
-        self.gamepad.connect()
+        self._init_gamepad()
 
         self.counter = 0
         self.viewer = None
@@ -124,6 +124,28 @@ class MujocoDeploy:
         self._init_control()
 
     # ---- optional telemetry ----
+
+    def _init_gamepad(self) -> None:
+        self.remote_gamepad_enabled = bool(self.config.remote_gamepad_enabled)
+        if not self.remote_gamepad_enabled:
+            self.gamepad = Gamepad(joystick_index=0)
+            self.gamepad.connect()
+            return
+
+        self.gamepad = VirtualGamepad(
+            host=self.config.remote_gamepad_host,
+            port=self.config.remote_gamepad_port,
+        )
+        try:
+            connected = self.gamepad.connect()
+        except OSError as exc:
+            raise RuntimeError(
+                "Failed to start virtual gamepad listener on "
+                f"{self.config.remote_gamepad_host}:"
+                f"{self.config.remote_gamepad_port}: {exc}"
+            ) from exc
+        if not connected:
+            raise RuntimeError("Failed to start virtual gamepad listener")
 
     def _init_plotjuggler(self) -> None:
         self.plotjuggler_enabled = bool(self.config.plotjuggler_enabled)

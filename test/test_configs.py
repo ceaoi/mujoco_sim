@@ -120,6 +120,9 @@ def test_configs_use_absolute_paths_immutable_sequences_and_frozen_instances():
     assert config.policy_path.is_absolute()
     assert isinstance(config.cmd_range, tuple)
     assert isinstance(config.leg_joint_idx, tuple)
+    assert not config.remote_gamepad_enabled
+    assert config.remote_gamepad_host == "127.0.0.1"
+    assert config.remote_gamepad_port == 5555
 
     with pytest.raises(FrozenInstanceError):
         config.simulation_dt = 0.001  # type: ignore[misc]
