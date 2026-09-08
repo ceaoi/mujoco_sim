@@ -3,3 +3,5 @@ numpy>=1.21.0
 onnxruntime>=1.14.0
 pygame>=2.0.0
 matplotlib>=3.5.0
+mjviser==0.0.14
+viser>=1.0.27,<2.0.0

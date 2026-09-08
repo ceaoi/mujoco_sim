@@ -120,9 +120,11 @@ def test_configs_use_absolute_paths_immutable_sequences_and_frozen_instances():
     assert config.policy_path.is_absolute()
     assert isinstance(config.cmd_range, tuple)
     assert isinstance(config.leg_joint_idx, tuple)
-    assert not config.remote_gamepad_enabled
-    assert config.remote_gamepad_host == "127.0.0.1"
+    assert not config.remote_enabled
+    assert config.remote_host == "127.0.0.1"
     assert config.remote_gamepad_port == 5555
+    assert config.remote_viewer_port == 8080
+    assert config.remote_viewer_update_hz == 30.0
 
     with pytest.raises(FrozenInstanceError):
         config.simulation_dt = 0.001  # type: ignore[misc]
@@ -130,6 +132,15 @@ def test_configs_use_absolute_paths_immutable_sequences_and_frozen_instances():
     state = np.arange(16)
     joint_idx = np.asarray(config.leg_joint_idx, dtype=np.intp)
     np.testing.assert_array_equal(state[joint_idx], state[list(config.leg_joint_idx)])
+
+
+@pytest.mark.parametrize(
+    "legacy_field",
+    ("remote_gamepad_enabled", "remote_gamepad_host"),
+)
+def test_removed_remote_gamepad_config_fields_are_rejected(legacy_field):
+    with pytest.raises(TypeError, match=legacy_field):
+        M20FlatConfig(**{legacy_field: True})
 
 
 def test_wh044x_config_keeps_chassis_specific_paths_and_dimensions():

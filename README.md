@@ -47,7 +47,7 @@ conda activate ms
 pip install -r mujoco_sim/requirements.txt
 ```
 
-基础依赖包括 `mujoco>=3.9.0`、`numpy`、`onnxruntime`、`pygame` 和 `matplotlib`。MuJoCo 3.9 提供左上角 Base 状态 HUD 和深度离屏渲染使用的接口。此外还需要准备：
+基础依赖包括 `mujoco>=3.9.0`、`numpy`、`onnxruntime`、`pygame`、`matplotlib` 和 `mjviser`。MuJoCo 3.9 提供左上角 Base 状态 HUD 和深度离屏渲染使用的接口；mjviser/Viser 用于远程 Web 可视化。此外还需要准备：
 
 - PlotJuggler 遥测（可选）：需要发送调试数据时安装 [`data_vis`](https://github.com/ceaoi/data_vis)。未开启遥测时不会导入该包；开启但包或 UDP socket 不可用时会告警并自动关闭遥测，不影响仿真继续运行。
 - WH044X：编译可被 Python 导入的 `chassis` 扩展，并更新 `chassis_build_dir`。
@@ -87,7 +87,7 @@ python -m mujoco_sim.utils.gamepad_pygame --index 0 --hz 20
 
 ## Base 状态 HUD
 
-所有继承 `MujocoDeploy` 的入口都会在 MuJoCo 界面左上角显示 Base 状态，无需增加额外配置。默认 Base 是合并模型中第一个 `<freejoint/>` 所属的 body；当前 M20、ZB02W 和 WH044X 均先合并机器人、再合并弹丸，因此会选择机器人 Base，而不是弹丸的 free joint。
+使用原生 MuJoCo viewer 时，所有继承 `MujocoDeploy` 的入口都会在界面左上角显示 Base 状态，无需增加额外配置。远程 mjviser 模式不显示该原生 HUD。默认 Base 是合并模型中第一个 `<freejoint/>` 所属的 body；当前 M20、ZB02W 和 WH044X 均先合并机器人、再合并弹丸，因此会选择机器人 Base，而不是弹丸的 free joint。
 
 HUD 以固定 20 Hz 刷新，数值保留三位小数；相机和 viewer 画面同步仍保持原有频率。当前 `simulation_dt=0.0005 s` 时，每 100 个仿真步更新一次 HUD。显示字段如下：
 
@@ -119,12 +119,12 @@ HUD 以固定 20 Hz 刷新，数值保留三位小数；相机和 viewer 画面�
 
 默认 pygame 映射位于 `utils/gamepad_pygame.py`。不同手柄或操作系统的轴编号可能不同，需要调整 `axis_map` / `button_map`。
 
-### SSH 远程手柄
+### SSH 远程操作与 Web 可视化
 
-远程手柄使用 TCP 端口 `5555`：本地电脑读取物理手柄并作为客户端发送状态，远端仿真中的 `VirtualGamepad` 只监听回环地址。先把目标入口创建配置的代码改为启用远程手柄：
+远程模式使用 TCP 端口 `5555` 接收本地物理手柄状态，并在 `8080` 启动 mjviser Web 服务。两个服务默认只监听远端回环地址。先把目标入口创建配置的代码改为启用统一远程模式：
 
 ```python
-config = Zb02wRoughConfig(remote_gamepad_enabled=True)
+config = Zb02wRoughConfig(remote_enabled=True)
 deploy = Zb02wRoughDeploy(config)
 ```
 
@@ -139,17 +139,22 @@ ssh \
 python mujoco_sim/run_script.py --filename=zb02w_rough
 ```
 
-最后在本地另一个终端启动手柄发送端：
+最后在本地另一个终端启动统一客户端。它会持续发送手柄状态，等待 SSH 转发后的 Web 服务可用，并自动打开 `http://127.0.0.1:8080`：
 
 ```bash
-python -m mujoco_sim.utils.remote_gamepad \
+python mujoco_sim/remote_client.py \
     --host 127.0.0.1 \
-    --port 5555 \
+    --gamepad-port 5555 \
+    --viewer-port 8080 \
     --index 0 \
     --hz 50
 ```
 
-发送内容是完整手柄状态，不仅包含三维速度指令，还包含 L2/R2、A/B/X/Y、L1/R1，因此重置、相机、弹丸、gyrate mode 和 WH044X chassis mode 均可远程操作。TCP 断开时远端会保持最后收到的状态并等待客户端重连，不会自动归零；运动中的机器人可能因此继续运动。`8080` 仅为其他远程界面或视频服务预留，本模块不监听或使用该端口。
+`remote_client.py` 不需要 `--filename` 或本地 XML：模型与实时状态由远端仿真直接交给 mjviser，再由浏览器通过 HTTP/WebSocket 接收。无图形桌面或不希望自动打开浏览器时增加 `--no-browser`，然后手动访问上述 URL。
+
+发送内容是完整手柄状态，不仅包含三维速度指令，还包含 L2/R2、A/B/X/Y、L1/R1，因此重置、相机跟随、弹丸、gyrate mode 和 WH044X chassis mode 均可远程操作。Web 场景以 30 Hz 更新，并提供相机、显示图层、接触和几何选项，但不从浏览器暂停、单步或重置仿真。手柄 TCP 断开时远端会保持最后收到的状态并等待客户端重连，不会自动归零；运动中的机器人可能因此继续运动。
+
+Viser 在端口被占用时会尝试其他端口，但远程模式要求实际端口必须与 `remote_viewer_port` 一致，否则会停止 Web 服务并报错，避免与固定 SSH 隧道失配。
 
 ## 核心流程
 
@@ -157,6 +162,8 @@ python -m mujoco_sim.utils.remote_gamepad \
 run_script.py
 └── scripts/<filename>.py
     └── MujocoDeploy.run()
+        ├── 本地模式：原生 MuJoCo viewer
+        ├── 远程模式：mjviser/Viser 以 30 Hz 更新 Web 场景
         ├── 每个仿真步：update_tau() → mj_step()
         └── 每 control_decimation 步：
             手柄 → update_cmd() → update_obs()
@@ -296,8 +303,10 @@ Rough 和 TS 配置继承对应机器人的 Flat 配置，只声明有差异的�
 | `action_scale_pos`, `action_scale_vel` | 策略动作到目标位置 / 速度的缩放 |
 | `cmd_range`, `cmd_deadzone` | 手柄速度范围与死区 |
 | `max_command_rate` | M20 / ZB02W 指令变化率上限 |
-| `remote_gamepad_enabled` | 是否使用通过 TCP 接收状态的虚拟手柄；默认关闭 |
-| `remote_gamepad_host`, `remote_gamepad_port` | 虚拟手柄监听地址和端口；默认 `127.0.0.1:5555` |
+| `remote_enabled` | 是否同时启用 TCP 虚拟手柄和 mjviser Web viewer；默认关闭 |
+| `remote_host` | 两个远程服务的监听地址；默认 `127.0.0.1` |
+| `remote_gamepad_port`, `remote_viewer_port` | 虚拟手柄与 Web viewer 端口；默认分别为 `5555`、`8080` |
+| `remote_viewer_update_hz` | mjviser 场景更新频率；默认 `30 Hz` |
 | `wheel_stop_pid_enabled` | 是否启用接近静止时的轮速 PID 修正；未配置时为 `false` |
 | `wheel_stop_pid_kp`, `wheel_stop_pid_ki`, `wheel_stop_pid_kd` | 轮子静止 PID 的比例、积分和微分增益；未配置时为 `0.0` |
 | `wheel_stop_pid_output_limit` | 单个轮子的 PID 目标轮速修正绝对值上限，必须大于 0；未配置时为 `5.0` |
@@ -310,6 +319,7 @@ Rough 和 TS 配置继承对应机器人的 Flat 配置，只声明有差异的�
 ```text
 mujoco_sim/
 ├── run_script.py              # 统一入口，根据 --filename 执行 scripts/ 下的脚本
+├── remote_client.py           # 本地手柄发送与 mjviser 浏览器入口
 ├── configs/                   # dataclass 配置：公共基类及各机器人 Flat/Rough/TS 子类
 ├── scripts/
 │   ├── base/

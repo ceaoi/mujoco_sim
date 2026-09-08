@@ -1,3 +1,4 @@
+import math
 import os
 import time
 import warnings
@@ -108,6 +109,7 @@ class MujocoDeploy:
 
         self.counter = 0
         self.viewer = None
+        self.mjviser_scene = None
 
         self.obs = np.zeros(self.num_obs, dtype=np.float32)
         self.obs_hist = np.zeros(self.obs_hist_dim, dtype=np.float32)
@@ -126,14 +128,14 @@ class MujocoDeploy:
     # ---- optional telemetry ----
 
     def _init_gamepad(self) -> None:
-        self.remote_gamepad_enabled = bool(self.config.remote_gamepad_enabled)
-        if not self.remote_gamepad_enabled:
+        self.remote_enabled = bool(self.config.remote_enabled)
+        if not self.remote_enabled:
             self.gamepad = Gamepad(joystick_index=0)
             self.gamepad.connect()
             return
 
         self.gamepad = VirtualGamepad(
-            host=self.config.remote_gamepad_host,
+            host=self.config.remote_host,
             port=self.config.remote_gamepad_port,
         )
         try:
@@ -141,7 +143,7 @@ class MujocoDeploy:
         except OSError as exc:
             raise RuntimeError(
                 "Failed to start virtual gamepad listener on "
-                f"{self.config.remote_gamepad_host}:"
+                f"{self.config.remote_host}:"
                 f"{self.config.remote_gamepad_port}: {exc}"
             ) from exc
         if not connected:
@@ -224,29 +226,107 @@ class MujocoDeploy:
 
     def run(self, duration=1e3):
         self.reset()
-        start = time.time()
+        if self.remote_enabled:
+            self._run_remote_viewer(duration)
+        else:
+            self._run_native_viewer(duration)
+
+    def _run_native_viewer(self, duration):
+        start = time.perf_counter()
 
         with mujoco.viewer.launch_passive(self.robot, self.data) as viewer:
             self.viewer = viewer
             next_tick = time.perf_counter()
-            while viewer.is_running() and (time.time() - start < duration):
+            try:
+                while viewer.is_running() and (time.perf_counter() - start < duration):
+                    next_tick += self.robot.opt.timestep
+                    self.step()
+
+                    if self.counter % 10 == 0:
+                        with viewer.lock():
+                            if self.follow_camera:
+                                self.set_camera_follow()
+                        if self.counter % self._base_hud_update_interval == 0:
+                            self._update_base_state_hud()
+                        viewer.sync()
+
+                    next_tick = self._pace_simulation(next_tick)
+            finally:
+                self.viewer = None
+
+    def _run_remote_viewer(self, duration):
+        update_hz = float(self.config.remote_viewer_update_hz)
+        if not math.isfinite(update_hz) or update_hz <= 0.0:
+            raise ValueError("remote_viewer_update_hz must be finite and greater than zero")
+
+        server, scene = self._create_remote_viewer()
+        self.mjviser_scene = scene
+        render_period = 1.0 / update_hz
+        try:
+            mujoco.mj_forward(self.robot, self.data)
+            scene.update_from_mjdata(self.data)
+
+            start = time.perf_counter()
+            next_tick = start
+            next_render = start + render_period
+            while time.perf_counter() - start < duration:
                 next_tick += self.robot.opt.timestep
                 self.step()
 
-                if self.counter % 10 == 0:
-                    with viewer.lock():
-                        if self.follow_camera:
-                            self.set_camera_follow()
-                    if self.counter % self._base_hud_update_interval == 0:
-                        self._update_base_state_hud()
-                    viewer.sync()
+                now = time.perf_counter()
+                if now + np.finfo(np.float64).eps >= next_render:
+                    scene.update_from_mjdata(self.data)
+                    elapsed_periods = max(
+                        1,
+                        math.floor((now - next_render) / render_period) + 1,
+                    )
+                    next_render += elapsed_periods * render_period
 
-                remain = next_tick - time.perf_counter()
-                if remain > 0:
-                    if remain > 5e-4:
-                        time.sleep(remain)
-                else:
-                    next_tick = time.perf_counter()
+                next_tick = self._pace_simulation(next_tick)
+        except KeyboardInterrupt:
+            print("\n[deploy_mujoco] Remote viewer stopped by user.")
+        finally:
+            self.mjviser_scene = None
+            server.stop()
+
+    def _create_remote_viewer(self):
+        try:
+            mjviser = import_module("mjviser")
+            viser = import_module("viser")
+        except ImportError as exc:
+            raise RuntimeError(
+                "Remote visualization requires mjviser and viser; "
+                "install mujoco_sim/requirements.txt"
+            ) from exc
+
+        server = viser.ViserServer(
+            host=self.config.remote_host,
+            port=self.config.remote_viewer_port,
+        )
+        actual_port = server.get_port()
+        if actual_port != self.config.remote_viewer_port:
+            server.stop()
+            raise RuntimeError(
+                f"Remote viewer port {self.config.remote_viewer_port} is unavailable; "
+                f"Viser selected {actual_port}, which does not match the SSH tunnel"
+            )
+
+        try:
+            scene = mjviser.ViserMujocoScene(server, self.robot, num_envs=1)
+            scene.create_visualization_gui()
+        except Exception:
+            server.stop()
+            raise
+        return server, scene
+
+    @staticmethod
+    def _pace_simulation(next_tick):
+        remain = next_tick - time.perf_counter()
+        if remain > 0:
+            if remain > 5e-4:
+                time.sleep(remain)
+            return next_tick
+        return time.perf_counter()
 
     def step(self):
         if self.counter % self.control_decimation == 0:
@@ -333,7 +413,11 @@ class MujocoDeploy:
         r2_pressed = self.gamepad.is_axis_pressed("R2", threshold=0.5)
 
         if (not self.prev_r2_pressed) and r2_pressed:
-            self.follow_camera = not self.follow_camera
+            if self.mjviser_scene is None:
+                self.follow_camera = not self.follow_camera
+            else:
+                self.follow_camera = not self.mjviser_scene.camera_tracking_enabled
+                self.mjviser_scene.camera_tracking_enabled = self.follow_camera
             mode = "FOLLOW" if self.follow_camera else "FIXED"
             print(f"[deploy_mujoco] Camera mode -> {mode}")
 

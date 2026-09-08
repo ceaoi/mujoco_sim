@@ -190,11 +190,11 @@ def test_base_selects_local_gamepad_by_default(monkeypatch):
 
     monkeypatch.setattr("mujoco_sim.scripts.base.base.Gamepad", FakeGamepad)
     deploy = object.__new__(MujocoDeploy)
-    deploy.config = SimpleNamespace(remote_gamepad_enabled=False)
+    deploy.config = SimpleNamespace(remote_enabled=False)
 
     deploy._init_gamepad()
 
-    assert not deploy.remote_gamepad_enabled
+    assert not deploy.remote_enabled
     assert created == [("local", 0)]
     assert isinstance(deploy.gamepad, FakeGamepad)
 
@@ -215,14 +215,14 @@ def test_base_selects_virtual_gamepad_when_enabled(monkeypatch):
     )
     deploy = object.__new__(MujocoDeploy)
     deploy.config = SimpleNamespace(
-        remote_gamepad_enabled=True,
-        remote_gamepad_host="127.0.0.1",
+        remote_enabled=True,
+        remote_host="127.0.0.1",
         remote_gamepad_port=5555,
     )
 
     deploy._init_gamepad()
 
-    assert deploy.remote_gamepad_enabled
+    assert deploy.remote_enabled
     assert created == [("127.0.0.1", 5555)]
     assert isinstance(deploy.gamepad, FakeVirtualGamepad)
 
@@ -235,8 +235,8 @@ def test_base_reports_virtual_gamepad_bind_failure():
     try:
         deploy = object.__new__(MujocoDeploy)
         deploy.config = SimpleNamespace(
-            remote_gamepad_enabled=True,
-            remote_gamepad_host="127.0.0.1",
+            remote_enabled=True,
+            remote_host="127.0.0.1",
             remote_gamepad_port=occupied_port,
         )
 
