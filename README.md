@@ -39,7 +39,7 @@ wl_lab/
 
 ## 安装
 
-建议使用 Python 3.10，并在 `wl_lab` 根目录执行：
+建议使用 Python 3.10，并在项目根目录执行：
 
 ```bash
 conda create -n ms python=3.10 -y
@@ -55,7 +55,7 @@ pip install -r mujoco_sim/requirements.txt
 
 ## 运行
 
-以下命令均从 `wl_lab` 根目录执行：
+以下命令均从项目根目录（"mujoco_sim/.."）执行：
 
 ```bash
 # M20
@@ -151,6 +151,8 @@ python mujoco_sim/remote_client.py \
 ```
 
 `remote_client.py` 不需要 `--filename` 或本地 XML：模型与实时状态由远端仿真直接交给 mjviser，再由浏览器通过 HTTP/WebSocket 接收。无图形桌面或不希望自动打开浏览器时增加 `--no-browser`，然后手动访问上述 URL。
+
+远端通过 `run_script.py` 启动时，如果进程没有 `DISPLAY` 且未显式设置 `MUJOCO_GL`，入口会在导入 MuJoCo 前自动选择 `MUJOCO_GL=egl`。因此 `zb02w_depth` 的离屏深度渲染无需再在命令前手动添加该环境变量；已有的显式 `MUJOCO_GL` 设置不会被覆盖。
 
 发送内容是完整手柄状态，不仅包含三维速度指令，还包含 L2/R2、A/B/X/Y、L1/R1，因此重置、相机跟随、弹丸、gyrate mode 和 WH044X chassis mode 均可远程操作。Web 场景以 30 Hz 更新，并提供相机、显示图层、接触和几何选项，但不从浏览器暂停、单步或重置仿真。手柄 TCP 断开时远端会保持最后收到的状态并等待客户端重连，不会自动归零；运动中的机器人可能因此继续运动。
 
@@ -361,6 +363,8 @@ mujoco_sim/
 ## URDF 转 MJCF
 
 `utils/urdf2xml.py` 使用 MuJoCo 官方 Python API 编译 URDF，并自动处理常见 mesh 路径、浮动基座、视觉 / 碰撞分类、灯光、地面和 motor actuator。
+
+转换时，脚本会先在临时 URDF 中使用绝对 mesh 路径，避免临时文件复制到 `/tmp` 后无法编译；最终 MJCF 中的 `<mesh file="...">` 会改为相对于输出 XML 所在目录的路径。`--keep-temp` 保留的中间 URDF 仍使用绝对路径。
 
 ```bash
 # 默认输出为输入文件同目录下的同名 .xml

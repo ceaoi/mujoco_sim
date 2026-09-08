@@ -3,7 +3,7 @@
 """
 Convert a URDF file to MuJoCo MJCF XML.
 
-Version: mesh-path-fix-keep-visual-auto-motor-required-base-wrap-freejoint-default-classes-expanded-attrs-light-floor-v3-compatible-2026-06-17
+Version: mesh-path-fix-keep-visual-auto-motor-required-base-wrap-freejoint-default-classes-expanded-attrs-light-floor-relative-output-v4-compatible-2026-09-08
 
 Usage:
     python urdf2xml.py --path=/path/to/robot.urdf --base=base_link
@@ -21,6 +21,8 @@ Path handling policy:
     - package:// paths are also supported through auto package discovery and --package-map.
     - The temporary URDF uses absolute mesh paths, so relative paths will not break after
       the URDF is copied into /tmp.
+    - The final MJCF stores mesh paths relative to the output XML directory, so the
+      generated model does not retain machine-specific absolute paths.
     - By default, MuJoCo URDF visual meshes are preserved by injecting
       <mujoco><compiler discardvisual="false"/></mujoco> into the temporary URDF.
     - The --base argument is required. The generated MJCF body named by --base gets
@@ -326,6 +328,32 @@ def rewrite_mesh_filenames(
     return temp_urdf
 
 
+def relativize_mjcf_mesh_paths(xml_path: Path) -> int:
+    """Rewrite absolute MJCF mesh file paths relative to the output XML directory."""
+    xml_path = xml_path.expanduser().resolve()
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    rewritten_count = 0
+
+    for asset in root.findall("asset"):
+        for mesh in asset.findall("mesh"):
+            file_value = mesh.get("file")
+            if not file_value:
+                continue
+
+            mesh_path = Path(file_value).expanduser()
+            if not mesh_path.is_absolute():
+                continue
+
+            relative_path = os.path.relpath(mesh_path, start=xml_path.parent)
+            mesh.set("file", Path(relative_path).as_posix())
+            rewritten_count += 1
+
+    if rewritten_count:
+        ET.indent(tree, space="  ")
+        tree.write(xml_path, encoding="utf-8", xml_declaration=True)
+
+    return rewritten_count
 
 
 def _version_tuple(version_text: str) -> Tuple[int, int, int]:
@@ -1307,6 +1335,12 @@ def convert_urdf_to_mjcf(
 
         mujoco.mj_saveLastXML(str(output_path), model)
         print(f"[OK] Saved MJCF XML: {output_path}")
+
+        relative_mesh_count = relativize_mjcf_mesh_paths(output_path)
+        print(
+            f"[OK] Rewrote {relative_mesh_count} final MJCF mesh path(s) "
+            "relative to the output XML directory."
+        )
 
         # The synthetic URDF root was only needed during compilation to preserve
         # base_link as a real body with inertia.  Remove that temporary MJCF wrapper
