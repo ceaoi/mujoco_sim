@@ -402,3 +402,13 @@ python mujoco_sim/utils/urdf2xml.py \
 ```bash
 python mujoco_sim/utils/urdf2xml.py --help
 ```
+
+## 拉取最新模型
+
+在 `mujoco_sim/configs/remote_file_sync_cfg.py` 中配置 SFTP 路径、文件通配名和本地目录，然后从项目根目录运行：
+
+```bash
+python mujoco_sim/utils/pull_file.py
+```
+
+脚本会从远端最新一级子目录中下载修改时间最新的匹配文件；本地目录不存在或没有匹配文件时会明确报错，同名文件已存在时跳过。
