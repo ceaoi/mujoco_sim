@@ -56,6 +56,9 @@ class Zb02wGyrateConfig(Zb02wFlatConfig):
     num_obs: int = 50
     is_rnn: bool = False
 
+@dataclass(frozen=True, kw_only=True)
+class Zb02wGyrateFlatConfig(Zb02wGyrateConfig):
+    policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/gyrate_flat/1_exported/policy.onnx"
 
 @dataclass(frozen=True, kw_only=True)
 class Zb02wRoughConfig(Zb02wFlatConfig):

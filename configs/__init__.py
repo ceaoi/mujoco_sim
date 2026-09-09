@@ -5,6 +5,7 @@ from .zb02w_cfg import (
     Zb02wDepthConfig,
     Zb02wFlatConfig,
     Zb02wGyrateConfig,
+    Zb02wGyrateFlatConfig,
     Zb02wRoughConfig,
     Zb02wTsConfig,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "M20RoughConfig",
     "Zb02wFlatConfig",
     "Zb02wGyrateConfig",
+    "Zb02wGyrateFlatConfig",
     "Zb02wRoughConfig",
     "Zb02wTsConfig",
     "Zb02wDepthConfig",
