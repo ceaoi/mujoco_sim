@@ -52,7 +52,7 @@ class Zb02wFlatConfig(WheelLeggedConfig):
 
 @dataclass(frozen=True, kw_only=True)
 class Zb02wGyrateConfig(Zb02wFlatConfig):
-    policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/gyrate/1_exported/policy.onnx"
+    policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/gyrate_mix/1_exported/policy.onnx"
     num_obs: int = 50
     is_rnn: bool = False
 

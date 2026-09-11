@@ -3,15 +3,18 @@ import numpy as np
 from mujoco_sim.configs import Zb02wGyrateConfig
 from mujoco_sim.scripts.base.base_wl import wheel_stop_pid
 from mujoco_sim.scripts.zb02w_flat import Zb02wFlatDeploy
-from mujoco_sim.utils.deploy_func import quat_rotate_inverse
+from mujoco_sim.utils.deploy_func import pd_ctrl, quat_rotate_inverse
 
 
 class Zb02wGyrateDeploy(Zb02wFlatDeploy):
 
     num_modes = 3
+    torque_tracking_time = 5.0e-3
+    torque_tracking_fraction = 0.95
 
     def __init__(self, config: Zb02wGyrateConfig, device="cpu"):
         super().__init__(config, device)
+        self._init_tau_response()
 
         # Policy 观测保持训练端顺序：50 维 policy 后拼接 3 维 mode one-hot。
         self.mode = 0
@@ -26,10 +29,48 @@ class Zb02wGyrateDeploy(Zb02wFlatDeploy):
         )
         self.h_in = np.zeros(h_shape, dtype=np.float32)
 
+    def _init_tau_response(self):
+        self._target_tau = np.zeros_like(self.tau)
+        self._tau_response_delta = np.zeros_like(self.tau)
+        self._zero_wheel_tau_error = np.zeros(self.num_wheels, dtype=np.float32)
+        remaining_fraction = 1.0 - self.torque_tracking_fraction
+        self._tau_response_alpha = np.float32(
+            1.0 - remaining_fraction ** (self.sim_dt / self.torque_tracking_time)
+        )
+
     def _reset_control(self):
         super()._reset_control()
+        self.tau[:] = 0.0
+        self._target_tau[:] = 0.0
+        self._tau_response_delta[:] = 0.0
         self.mode = 0
         self.h_in[:] = 0.0
+
+    def update_tau(self):
+        self._target_tau[self.leg_actions_to_mujoco] = pd_ctrl(
+            self.targ_dof_pos - self.data.qpos[7:][self.leg_joint_idx],
+            -self.data.qvel[6:][self.leg_joint_idx],
+            self.kpsPos,
+            self.kdsPos,
+        )
+        self._target_tau[self.wheel_actions_to_mujoco] = pd_ctrl(
+            self._zero_wheel_tau_error,
+            self.targ_dof_vel - self.data.qvel[6:][self.wheel_joint_idx],
+            self.kpsVel,
+            self.kdsVel,
+        )
+
+        np.subtract(self._target_tau, self.tau, out=self._tau_response_delta)
+        np.multiply(
+            self._tau_response_delta,
+            self._tau_response_alpha,
+            out=self._tau_response_delta,
+        )
+        np.add(self.tau, self._tau_response_delta, out=self.tau)
+
+        self.send_plotjuggler_data("targ_pos", self.targ_dof_pos)
+        self.send_plotjuggler_data("targ_vel", self.targ_dof_vel)
+        self.send_plotjuggler_data("tau", self.tau)
 
     def handle_gamepad_events(self):
         super().handle_gamepad_events()

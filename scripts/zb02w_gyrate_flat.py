@@ -14,6 +14,7 @@ class Zb02wGyrateFlatDeploy(Zb02wGyrateDeploy):
         # Skip Zb02wGyrateDeploy.__init__: that deployment owns the hidden state
         # required by its GRU policy. The flat policy is a plain MLP.
         Zb02wFlatDeploy.__init__(self, config, device)
+        self._init_tau_response()
 
         self.mode = 0
         self.model_in = np.zeros(
@@ -23,6 +24,9 @@ class Zb02wGyrateFlatDeploy(Zb02wGyrateDeploy):
 
     def _reset_control(self):
         Zb02wFlatDeploy._reset_control(self)
+        self.tau[:] = 0.0
+        self._target_tau[:] = 0.0
+        self._tau_response_delta[:] = 0.0
         self.mode = 0
 
     def _update_mode_from_gamepad(self):

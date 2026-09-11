@@ -26,7 +26,7 @@ class MujocoSimConfig:
     remote_enabled: bool = False
     remote_host: str = "127.0.0.1"
     remote_gamepad_port: int = 5555
-    remote_viewer_port: int = 8080
+    remote_viewer_port: int = 28080
     remote_viewer_update_hz: float = 30.0
     terrain_xml_path: Path | None = None
     plotjuggler_enabled: bool = False

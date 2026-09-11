@@ -4,6 +4,8 @@ import numpy as np
 
 from mujoco_sim.configs import Zb02wGyrateConfig
 from mujoco_sim.scripts.zb02w_gyrate import Zb02wGyrateDeploy
+from mujoco_sim.scripts.zb02w_gyrate_flat import Zb02wGyrateFlatDeploy
+from mujoco_sim.scripts.zb02w_flat import Zb02wFlatDeploy
 
 
 class FakeGamepad:
@@ -163,8 +165,82 @@ def test_reset_control_restores_default_mode_and_clears_gru_state():
     deploy.is_rnn = False
     deploy.mode = 2
     deploy.h_in = np.ones((1, 1, 256), dtype=np.float32)
+    deploy.tau = np.ones(16, dtype=np.float32)
+    deploy._target_tau = np.ones(16, dtype=np.float32)
+    deploy._tau_response_delta = np.ones(16, dtype=np.float32)
 
     deploy._reset_control()
 
     assert deploy.mode == 0
     np.testing.assert_array_equal(deploy.h_in, np.zeros_like(deploy.h_in))
+    np.testing.assert_array_equal(deploy.tau, np.zeros_like(deploy.tau))
+    np.testing.assert_array_equal(
+        deploy._target_tau,
+        np.zeros_like(deploy._target_tau),
+    )
+    np.testing.assert_array_equal(
+        deploy._tau_response_delta,
+        np.zeros_like(deploy._tau_response_delta),
+    )
+
+
+def test_tau_response_reaches_95_percent_after_one_millisecond():
+    config = Zb02wGyrateConfig(plotjuggler_enabled=False)
+    deploy = object.__new__(Zb02wGyrateDeploy)
+    deploy.sim_dt = config.simulation_dt
+    deploy.num_wheels = len(config.wheel_joint_idx)
+    deploy.leg_joint_idx = np.asarray(config.leg_joint_idx, dtype=np.intp)
+    deploy.wheel_joint_idx = np.asarray(config.wheel_joint_idx, dtype=np.intp)
+    deploy.leg_actions_to_mujoco = np.asarray(
+        config.leg_actions_to_mujoco,
+        dtype=np.intp,
+    )
+    deploy.wheel_actions_to_mujoco = np.asarray(
+        config.wheel_actions_to_mujoco,
+        dtype=np.intp,
+    )
+    deploy.kpsPos = np.ones(config.num_actions_pos, dtype=np.float32)
+    deploy.kdsPos = np.zeros(config.num_actions_pos, dtype=np.float32)
+    deploy.kpsVel = np.zeros(deploy.num_wheels, dtype=np.float32)
+    deploy.kdsVel = np.ones(deploy.num_wheels, dtype=np.float32)
+    deploy.targ_dof_pos = np.linspace(
+        -6.0,
+        5.0,
+        config.num_actions_pos,
+        dtype=np.float32,
+    )
+    deploy.targ_dof_vel = np.array(
+        [4.0, -3.0, 2.0, -1.0],
+        dtype=np.float32,
+    )
+    deploy.tau = np.zeros(config.num_actions, dtype=np.float32)
+    deploy.data = SimpleNamespace(
+        qpos=np.zeros(7 + config.num_actions, dtype=np.float32),
+        qvel=np.zeros(6 + config.num_actions, dtype=np.float32),
+    )
+    telemetry = []
+    deploy.send_plotjuggler_data = (
+        lambda name, value: telemetry.append((name, np.asarray(value).copy()))
+    )
+    deploy._init_tau_response()
+
+    target_tau = np.zeros(config.num_actions, dtype=np.float32)
+    target_tau[deploy.leg_actions_to_mujoco] = deploy.targ_dof_pos
+    target_tau[deploy.wheel_actions_to_mujoco] = deploy.targ_dof_vel
+
+    deploy.update_tau()
+    np.testing.assert_allclose(
+        deploy.tau,
+        deploy._tau_response_alpha * target_tau,
+        atol=1.0e-6,
+    )
+
+    deploy.update_tau()
+    np.testing.assert_allclose(deploy.tau, 0.95 * target_tau, atol=1.0e-6)
+    assert telemetry[-1][0] == "tau"
+    np.testing.assert_array_equal(telemetry[-1][1], deploy.tau)
+
+
+def test_tau_response_is_shared_only_by_gyrate_deployments():
+    assert Zb02wGyrateFlatDeploy.update_tau is Zb02wGyrateDeploy.update_tau
+    assert Zb02wFlatDeploy.update_tau is not Zb02wGyrateDeploy.update_tau
