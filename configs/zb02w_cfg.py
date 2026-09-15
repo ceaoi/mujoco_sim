@@ -98,7 +98,13 @@ class Zb02wDepthConfig(Zb02wTsConfig):
     )
     depth_camera_width: int = 64
     depth_camera_height: int = 36
-    depth_camera_fovy: float = 47.83
+    # Match the Isaac Lab pinhole camera in both image axes.  MuJoCo's fovy-only
+    # projection assumes square pixels, while the training camera has fx != fy.
+    depth_camera_focal_length: tuple[float, float] = (24.0, 24.0)
+    depth_camera_sensor_size: tuple[float, float] = (
+        45.55 * 0.8,
+        26.61 * 0.8,
+    )
     depth_camera_near: float = 0.05
     depth_camera_update_period: float = 1.0 / 60.0
     depth_min: float = 0.3

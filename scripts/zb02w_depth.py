@@ -135,8 +135,9 @@ class Zb02wDepthDeploy(Zb02wRoughDeploy):
             name=config.depth_camera_name,
             pos=config.depth_camera_pos,
             quat=mujoco_quat,
-            fovy=config.depth_camera_fovy,
             resolution=(config.depth_camera_width, config.depth_camera_height),
+            sensor_size=config.depth_camera_sensor_size,
+            focal_length=config.depth_camera_focal_length,
         )
         model = spec.compile()
         if not math.isfinite(model.stat.extent) or model.stat.extent <= 0.0:
@@ -159,8 +160,30 @@ class Zb02wDepthDeploy(Zb02wRoughDeploy):
             raise ValueError("depth_camera_quat must have non-zero norm")
         if config.depth_camera_width <= 0 or config.depth_camera_height <= 0:
             raise ValueError("depth camera width and height must be positive")
-        if not 0.0 < config.depth_camera_fovy < 180.0:
-            raise ValueError("depth_camera_fovy must be between 0 and 180 degrees")
+        focal_length = np.asarray(
+            config.depth_camera_focal_length,
+            dtype=np.float64,
+        )
+        sensor_size = np.asarray(
+            config.depth_camera_sensor_size,
+            dtype=np.float64,
+        )
+        if (
+            focal_length.shape != (2,)
+            or not np.all(np.isfinite(focal_length))
+            or np.any(focal_length <= 0.0)
+        ):
+            raise ValueError(
+                "depth_camera_focal_length must contain two finite positive values"
+            )
+        if (
+            sensor_size.shape != (2,)
+            or not np.all(np.isfinite(sensor_size))
+            or np.any(sensor_size <= 0.0)
+        ):
+            raise ValueError(
+                "depth_camera_sensor_size must contain two finite positive values"
+            )
         if (
             not math.isfinite(config.depth_camera_near)
             or not 0.0 < config.depth_camera_near <= config.depth_min
@@ -272,13 +295,30 @@ class Zb02wDepthDeploy(Zb02wRoughDeploy):
         v = v[sampled_valid]
         depth = depth[sampled_valid]
 
-        fovy = math.radians(float(self.robot.cam_fovy[self._depth_camera_id]))
-        focal_length = height / (2.0 * math.tan(fovy / 2.0))
+        camera_resolution = self.robot.cam_resolution[
+            self._depth_camera_id
+        ].astype(np.float64)
+        camera_sensor_size = self.robot.cam_sensorsize[
+            self._depth_camera_id
+        ].astype(np.float64)
+        camera_intrinsic = self.robot.cam_intrinsic[
+            self._depth_camera_id
+        ].astype(np.float64)
+        focal_x = (
+            camera_intrinsic[0]
+            * camera_resolution[0]
+            / camera_sensor_size[0]
+        )
+        focal_y = (
+            camera_intrinsic[1]
+            * camera_resolution[1]
+            / camera_sensor_size[1]
+        )
         center_x = (width - 1) / 2.0
         center_y = (height - 1) / 2.0
 
-        x_camera = (u - center_x) * depth / focal_length
-        y_camera = -(v - center_y) * depth / focal_length
+        x_camera = (u - center_x) * depth / focal_x
+        y_camera = -(v - center_y) * depth / focal_y
         z_camera = -depth
         points_camera = np.stack(
             (x_camera, y_camera, z_camera),

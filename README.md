@@ -133,7 +133,7 @@ deploy = Zb02wRoughDeploy(config)
 ```bash
 ssh \
     -L 5555:127.0.0.1:5555 \
-    -L 8080:127.0.0.1:8080 \
+    -L 28080:127.0.0.1:28080 \
     user@server
 
 python mujoco_sim/run_script.py --filename=zb02w_rough

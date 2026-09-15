@@ -1,3 +1,4 @@
+import math
 from types import SimpleNamespace
 
 import matplotlib.pyplot as plt
@@ -203,9 +204,44 @@ def test_load_model_attaches_camera_to_requested_body(tmp_path):
         CAMERA_FRAME_ALIGNMENT_QUAT,
     )
     np.testing.assert_allclose(model.cam_quat[camera_id], expected_quat, atol=1e-7)
-    assert model.cam_fovy[camera_id] == pytest.approx(
-        deploy.config.depth_camera_fovy
+    np.testing.assert_allclose(
+        model.cam_sensorsize[camera_id],
+        deploy.config.depth_camera_sensor_size,
     )
+    np.testing.assert_allclose(
+        model.cam_intrinsic[camera_id, :2],
+        deploy.config.depth_camera_focal_length,
+    )
+    np.testing.assert_allclose(model.cam_intrinsic[camera_id, 2:], (0.0, 0.0))
+    focal_pixel = (
+        model.cam_intrinsic[camera_id, :2]
+        * model.cam_resolution[camera_id]
+        / model.cam_sensorsize[camera_id]
+    )
+    expected_focal_pixel = np.array(
+        [
+            deploy.config.depth_camera_width
+            * deploy.config.depth_camera_focal_length[0]
+            / deploy.config.depth_camera_sensor_size[0],
+            deploy.config.depth_camera_height
+            * deploy.config.depth_camera_focal_length[1]
+            / deploy.config.depth_camera_sensor_size[1],
+        ]
+    )
+    np.testing.assert_allclose(focal_pixel, expected_focal_pixel)
+    horizontal_fov = math.degrees(
+        2.0
+        * math.atan(deploy.config.depth_camera_width / (2.0 * focal_pixel[0]))
+    )
+    expected_fovy = math.degrees(
+        2.0
+        * math.atan(
+            deploy.config.depth_camera_sensor_size[1]
+            / (2.0 * deploy.config.depth_camera_focal_length[1])
+        )
+    )
+    assert horizontal_fov == pytest.approx(74.409099)
+    assert model.cam_fovy[camera_id] == pytest.approx(expected_fovy)
     np.testing.assert_array_equal(
         model.cam_resolution[camera_id],
         (deploy.config.depth_camera_width, deploy.config.depth_camera_height),
@@ -268,7 +304,10 @@ def test_load_model_rejects_missing_link_and_invalid_quaternion(tmp_path):
     ("overrides", "message"),
     [
         ({"depth_camera_width": 0}, "width and height"),
-        ({"depth_camera_fovy": 180.0}, "between 0 and 180"),
+        ({"depth_camera_focal_length": (0.0, 24.0)}, "focal_length"),
+        ({"depth_camera_focal_length": (24.0,)}, "focal_length"),
+        ({"depth_camera_sensor_size": (36.44, float("nan"))}, "sensor_size"),
+        ({"depth_camera_sensor_size": (36.44, 0.0)}, "sensor_size"),
         ({"depth_camera_near": 0.0}, "depth_camera_near"),
         ({"depth_camera_near": float("nan")}, "depth_camera_near"),
         ({"depth_camera_near": 3.0}, "depth_camera_near"),
@@ -316,7 +355,7 @@ def test_depth_processing_clips_normalizes_and_preserves_shapes():
     assert metric.shape == (2, 3)
     np.testing.assert_allclose(
         metric,
-        [[0.1, 0.3, 1.65], [3.0, 3.0, 3.0]],
+        [[0.3, 0.3, 1.65], [3.0, 3.0, 3.0]],
     )
     assert normalized.dtype == np.float32
     assert normalized.shape == (1, 1, 2, 3)
@@ -452,7 +491,8 @@ def _projection_deploy(
     deploy = _bare_deploy(
         depth_camera_width=3,
         depth_camera_height=3,
-        depth_camera_fovy=90.0,
+        depth_camera_focal_length=(1.0, 1.0),
+        depth_camera_sensor_size=(2.0, 2.0),
         depth_camera_pos=(1.0, 2.0, 3.0),
         depth_camera_quat=(1.0, 0.0, 0.0, 0.0),
         depth_pointcloud_stride=1,
@@ -518,7 +558,8 @@ def test_depth_to_world_points_honors_stride_and_empty_mask(tmp_path):
         depth_camera_display=False,
         depth_camera_width=3,
         depth_camera_height=3,
-        depth_camera_fovy=90.0,
+        depth_camera_focal_length=(1.0, 1.0),
+        depth_camera_sensor_size=(2.0, 2.0),
         depth_camera_pos=(1.0, 2.0, 3.0),
         depth_camera_quat=(1.0, 0.0, 0.0, 0.0),
         depth_pointcloud_stride=2,
