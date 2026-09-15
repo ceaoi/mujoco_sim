@@ -78,10 +78,16 @@
         <!-- ===== Rear two-step row 2: 0.18m rise per step ===== -->
         <body name="terrain_rear18_left" pos="-10.0 4.0 0">
             <geom name="stair_rear18_left_up_1" class="terrain"
-                  type="box" size="0.125 2.0 0.090" pos="1.375 0 0.090"
+                  type="box" size="0.125 1.0 0.090" pos="1.375 -1.0 0.090"
+                  rgba="0.70 0.42 0.28 1"/>
+            <geom name="stair_rear18_left_up_1_hollow" class="terrain"
+                  type="box" size="0.125 1.0 0.015" pos="1.375 1.0 0.165"
                   rgba="0.70 0.42 0.28 1"/>
             <geom name="stair_rear18_left_up_2" class="terrain"
-                  type="box" size="0.125 2.0 0.180" pos="1.125 0 0.180"
+                  type="box" size="0.125 1.0 0.180" pos="1.125 -1.0 0.180"
+                  rgba="0.65 0.36 0.23 1"/>
+            <geom name="stair_rear18_left_up_2_hollow" class="terrain"
+                  type="box" size="0.125 1.0 0.015" pos="1.125 1.0 0.345"
                   rgba="0.65 0.36 0.23 1"/>
             <geom name="stair_rear18_left_platform" class="terrain"
                   type="box" size="1.0 2.0 0.180" pos="0 0 0.180"
@@ -90,10 +96,16 @@
 
         <body name="terrain_rear18_mid" pos="-10.0 0 0">
             <geom name="stair_rear18_mid_up_1" class="terrain"
-                  type="box" size="0.15 2.0 0.090" pos="1.45 0 0.090"
+                  type="box" size="0.15 1.0 0.090" pos="1.45 -1.0 0.090"
+                  rgba="0.70 0.42 0.28 1"/>
+            <geom name="stair_rear18_mid_up_1_hollow" class="terrain"
+                  type="box" size="0.15 1.0 0.015" pos="1.45 1.0 0.165"
                   rgba="0.70 0.42 0.28 1"/>
             <geom name="stair_rear18_mid_up_2" class="terrain"
-                  type="box" size="0.15 2.0 0.180" pos="1.15 0 0.180"
+                  type="box" size="0.15 1.0 0.180" pos="1.15 -1.0 0.180"
+                  rgba="0.65 0.36 0.23 1"/>
+            <geom name="stair_rear18_mid_up_2_hollow" class="terrain"
+                  type="box" size="0.15 1.0 0.015" pos="1.15 1.0 0.345"
                   rgba="0.65 0.36 0.23 1"/>
             <geom name="stair_rear18_mid_platform" class="terrain"
                   type="box" size="1.0 2.0 0.180" pos="0 0 0.180"
@@ -102,10 +114,16 @@
 
         <body name="terrain_rear18_right" pos="-10.0 -4.0 0">
             <geom name="stair_rear18_right_up_1" class="terrain"
-                  type="box" size="0.175 2.0 0.090" pos="1.525 0 0.090"
+                  type="box" size="0.175 1.0 0.090" pos="1.525 -1.0 0.090"
+                  rgba="0.70 0.42 0.28 1"/>
+            <geom name="stair_rear18_right_up_1_hollow" class="terrain"
+                  type="box" size="0.175 1.0 0.015" pos="1.525 1.0 0.165"
                   rgba="0.70 0.42 0.28 1"/>
             <geom name="stair_rear18_right_up_2" class="terrain"
-                  type="box" size="0.175 2.0 0.180" pos="1.175 0 0.180"
+                  type="box" size="0.175 1.0 0.180" pos="1.175 -1.0 0.180"
+                  rgba="0.65 0.36 0.23 1"/>
+            <geom name="stair_rear18_right_up_2_hollow" class="terrain"
+                  type="box" size="0.175 1.0 0.015" pos="1.175 1.0 0.345"
                   rgba="0.65 0.36 0.23 1"/>
             <geom name="stair_rear18_right_platform" class="terrain"
                   type="box" size="1.0 2.0 0.180" pos="0 0 0.180"
@@ -238,7 +256,7 @@
         </body>
 
         <!-- ===== Front row: 0.15m rise per step ===== -->
-        <body name="terrain_front_left" pos="10.0 4.0 0">
+        <body name="terrain_front_left" pos="10.5 4.0 0">
             <geom name="stair_front_left_up_1" class="terrain"
                   type="box" size="0.125 2.0 0.075" pos="-2.125 0 0.075"
                   rgba="0.65 0.45 0.35 1"/>
@@ -259,7 +277,7 @@
                   rgba="0.35 0.45 0.35 1"/>
         </body>
 
-        <body name="terrain_front_mid" pos="10.0 0 0">
+        <body name="terrain_front_mid" pos="10.5 0 0">
             <geom name="stair_front_mid_up_1" class="terrain"
                   type="box" size="0.15 2.0 0.075" pos="-2.35 0 0.075"
                   rgba="0.65 0.45 0.35 1"/>
@@ -280,7 +298,7 @@
                   rgba="0.35 0.45 0.35 1"/>
         </body>
 
-        <body name="terrain_front_right" pos="10.0 -4.0 0">
+        <body name="terrain_front_right" pos="10.5 -4.0 0">
             <geom name="stair_front_right_up_1" class="terrain"
                   type="box" size="0.175 2.0 0.075" pos="-2.575 0 0.075"
                   rgba="0.65 0.45 0.35 1"/>
@@ -301,7 +319,7 @@
                   rgba="0.35 0.45 0.35 1"/>
         </body>
 
-        <body name="terrain_front_row_ramp" pos="10.0 0 0">
+        <body name="terrain_front_row_ramp" pos="10.5 0 0">
             <geom name="ramp_front_row_down" class="terrain"
                   type="box" size="0.951972 6.0 0.025"
                   pos="1.865152 0 0.352021"
@@ -309,70 +327,115 @@
                   rgba="0.45 0.40 0.30 1"/>
         </body>
         <!-- ===== High row 1: 0.18m rise per step ===== -->
-        <body name="terrain_high18_left" pos="16.0 4.0 0">
+        <body name="terrain_high18_left" pos="17.0 4.0 0">
             <geom name="stair_high18_left_up_1" class="terrain"
-                  type="box" size="0.125 2.0 0.090" pos="-2.125 0 0.090"
+                  type="box" size="0.125 1.0 0.090" pos="-2.125 -1.0 0.090"
+                  rgba="0.70 0.42 0.28 1"/>
+            <geom name="stair_high18_left_up_1_hollow" class="terrain"
+                  type="box" size="0.125 1.0 0.015" pos="-2.125 1.0 0.165"
                   rgba="0.70 0.42 0.28 1"/>
             <geom name="stair_high18_left_up_2" class="terrain"
-                  type="box" size="0.125 2.0 0.180" pos="-1.875 0 0.180"
+                  type="box" size="0.125 1.0 0.180" pos="-1.875 -1.0 0.180"
+                  rgba="0.65 0.36 0.23 1"/>
+            <geom name="stair_high18_left_up_2_hollow" class="terrain"
+                  type="box" size="0.125 1.0 0.015" pos="-1.875 1.0 0.345"
                   rgba="0.65 0.36 0.23 1"/>
             <geom name="stair_high18_left_up_3" class="terrain"
-                  type="box" size="0.125 2.0 0.270" pos="-1.625 0 0.270"
+                  type="box" size="0.125 1.0 0.270" pos="-1.625 -1.0 0.270"
+                  rgba="0.60 0.30 0.18 1"/>
+            <geom name="stair_high18_left_up_3_hollow" class="terrain"
+                  type="box" size="0.125 1.0 0.015" pos="-1.625 1.0 0.525"
                   rgba="0.60 0.30 0.18 1"/>
             <geom name="stair_high18_left_up_4" class="terrain"
-                  type="box" size="0.125 2.0 0.360" pos="-1.375 0 0.360"
+                  type="box" size="0.125 1.0 0.360" pos="-1.375 -1.0 0.360"
+                  rgba="0.55 0.25 0.14 1"/>
+            <geom name="stair_high18_left_up_4_hollow" class="terrain"
+                  type="box" size="0.125 1.0 0.015" pos="-1.375 1.0 0.705"
                   rgba="0.55 0.25 0.14 1"/>
             <geom name="stair_high18_left_up_5" class="terrain"
-                  type="box" size="0.125 2.0 0.450" pos="-1.125 0 0.450"
+                  type="box" size="0.125 1.0 0.450" pos="-1.125 -1.0 0.450"
+                  rgba="0.50 0.20 0.10 1"/>
+            <geom name="stair_high18_left_up_5_hollow" class="terrain"
+                  type="box" size="0.125 1.0 0.015" pos="-1.125 1.0 0.885"
                   rgba="0.50 0.20 0.10 1"/>
             <geom name="stair_high18_left_platform" class="terrain"
                   type="box" size="1.0 2.0 0.450" pos="0 0 0.450"
                   rgba="0.35 0.45 0.35 1"/>
         </body>
 
-        <body name="terrain_high18_mid" pos="16.0 0.0 0">
+        <body name="terrain_high18_mid" pos="17.0 0.0 0">
             <geom name="stair_high18_mid_up_1" class="terrain"
-                  type="box" size="0.15 2.0 0.090" pos="-2.35 0 0.090"
+                  type="box" size="0.15 1.0 0.090" pos="-2.35 -1.0 0.090"
+                  rgba="0.70 0.42 0.28 1"/>
+            <geom name="stair_high18_mid_up_1_hollow" class="terrain"
+                  type="box" size="0.15 1.0 0.015" pos="-2.35 1.0 0.165"
                   rgba="0.70 0.42 0.28 1"/>
             <geom name="stair_high18_mid_up_2" class="terrain"
-                  type="box" size="0.15 2.0 0.180" pos="-2.05 0 0.180"
+                  type="box" size="0.15 1.0 0.180" pos="-2.05 -1.0 0.180"
+                  rgba="0.65 0.36 0.23 1"/>
+            <geom name="stair_high18_mid_up_2_hollow" class="terrain"
+                  type="box" size="0.15 1.0 0.015" pos="-2.05 1.0 0.345"
                   rgba="0.65 0.36 0.23 1"/>
             <geom name="stair_high18_mid_up_3" class="terrain"
-                  type="box" size="0.15 2.0 0.270" pos="-1.75 0 0.270"
+                  type="box" size="0.15 1.0 0.270" pos="-1.75 -1.0 0.270"
+                  rgba="0.60 0.30 0.18 1"/>
+            <geom name="stair_high18_mid_up_3_hollow" class="terrain"
+                  type="box" size="0.15 1.0 0.015" pos="-1.75 1.0 0.525"
                   rgba="0.60 0.30 0.18 1"/>
             <geom name="stair_high18_mid_up_4" class="terrain"
-                  type="box" size="0.15 2.0 0.360" pos="-1.45 0 0.360"
+                  type="box" size="0.15 1.0 0.360" pos="-1.45 -1.0 0.360"
+                  rgba="0.55 0.25 0.14 1"/>
+            <geom name="stair_high18_mid_up_4_hollow" class="terrain"
+                  type="box" size="0.15 1.0 0.015" pos="-1.45 1.0 0.705"
                   rgba="0.55 0.25 0.14 1"/>
             <geom name="stair_high18_mid_up_5" class="terrain"
-                  type="box" size="0.15 2.0 0.450" pos="-1.15 0 0.450"
+                  type="box" size="0.15 1.0 0.450" pos="-1.15 -1.0 0.450"
+                  rgba="0.50 0.20 0.10 1"/>
+            <geom name="stair_high18_mid_up_5_hollow" class="terrain"
+                  type="box" size="0.15 1.0 0.015" pos="-1.15 1.0 0.885"
                   rgba="0.50 0.20 0.10 1"/>
             <geom name="stair_high18_mid_platform" class="terrain"
                   type="box" size="1.0 2.0 0.450" pos="0 0 0.450"
                   rgba="0.35 0.45 0.35 1"/>
         </body>
 
-        <body name="terrain_high18_right" pos="16.0 -4.0 0">
+        <body name="terrain_high18_right" pos="17.0 -4.0 0">
             <geom name="stair_high18_right_up_1" class="terrain"
-                  type="box" size="0.175 2.0 0.090" pos="-2.575 0 0.090"
+                  type="box" size="0.175 1.0 0.090" pos="-2.575 -1.0 0.090"
+                  rgba="0.70 0.42 0.28 1"/>
+            <geom name="stair_high18_right_up_1_hollow" class="terrain"
+                  type="box" size="0.175 1.0 0.015" pos="-2.575 1.0 0.165"
                   rgba="0.70 0.42 0.28 1"/>
             <geom name="stair_high18_right_up_2" class="terrain"
-                  type="box" size="0.175 2.0 0.180" pos="-2.225 0 0.180"
+                  type="box" size="0.175 1.0 0.180" pos="-2.225 -1.0 0.180"
+                  rgba="0.65 0.36 0.23 1"/>
+            <geom name="stair_high18_right_up_2_hollow" class="terrain"
+                  type="box" size="0.175 1.0 0.015" pos="-2.225 1.0 0.345"
                   rgba="0.65 0.36 0.23 1"/>
             <geom name="stair_high18_right_up_3" class="terrain"
-                  type="box" size="0.175 2.0 0.270" pos="-1.875 0 0.270"
+                  type="box" size="0.175 1.0 0.270" pos="-1.875 -1.0 0.270"
+                  rgba="0.60 0.30 0.18 1"/>
+            <geom name="stair_high18_right_up_3_hollow" class="terrain"
+                  type="box" size="0.175 1.0 0.015" pos="-1.875 1.0 0.525"
                   rgba="0.60 0.30 0.18 1"/>
             <geom name="stair_high18_right_up_4" class="terrain"
-                  type="box" size="0.175 2.0 0.360" pos="-1.525 0 0.360"
+                  type="box" size="0.175 1.0 0.360" pos="-1.525 -1.0 0.360"
+                  rgba="0.55 0.25 0.14 1"/>
+            <geom name="stair_high18_right_up_4_hollow" class="terrain"
+                  type="box" size="0.175 1.0 0.015" pos="-1.525 1.0 0.705"
                   rgba="0.55 0.25 0.14 1"/>
             <geom name="stair_high18_right_up_5" class="terrain"
-                  type="box" size="0.175 2.0 0.450" pos="-1.175 0 0.450"
+                  type="box" size="0.175 1.0 0.450" pos="-1.175 -1.0 0.450"
+                  rgba="0.50 0.20 0.10 1"/>
+            <geom name="stair_high18_right_up_5_hollow" class="terrain"
+                  type="box" size="0.175 1.0 0.015" pos="-1.175 1.0 0.885"
                   rgba="0.50 0.20 0.10 1"/>
             <geom name="stair_high18_right_platform" class="terrain"
                   type="box" size="1.0 2.0 0.450" pos="0 0 0.450"
                   rgba="0.35 0.45 0.35 1"/>
         </body>
 
-        <body name="terrain_high18_row_ramp" pos="16.0 0 0">
+        <body name="terrain_high18_row_ramp" pos="17.0 0 0">
             <geom name="ramp_high18_row_down" class="terrain"
                   type="box" size="0.983933 6.0 0.025"
                   pos="1.863566 0 0.427768"
@@ -381,70 +444,115 @@
         </body>
 
         <!-- ===== High row 2: 0.25m rise per step ===== -->
-        <body name="terrain_high25_left" pos="22.0 4.0 0">
+        <body name="terrain_high25_left" pos="23.5 4.0 0">
             <geom name="stair_high25_left_up_1" class="terrain"
-                  type="box" size="0.125 2.0 0.125" pos="-2.125 0 0.125"
+                  type="box" size="0.125 1.0 0.125" pos="-2.125 -1.0 0.125"
+                  rgba="0.72 0.34 0.30 1"/>
+            <geom name="stair_high25_left_up_1_hollow" class="terrain"
+                  type="box" size="0.125 1.0 0.015" pos="-2.125 1.0 0.235"
                   rgba="0.72 0.34 0.30 1"/>
             <geom name="stair_high25_left_up_2" class="terrain"
-                  type="box" size="0.125 2.0 0.250" pos="-1.875 0 0.250"
+                  type="box" size="0.125 1.0 0.250" pos="-1.875 -1.0 0.250"
+                  rgba="0.66 0.28 0.25 1"/>
+            <geom name="stair_high25_left_up_2_hollow" class="terrain"
+                  type="box" size="0.125 1.0 0.015" pos="-1.875 1.0 0.485"
                   rgba="0.66 0.28 0.25 1"/>
             <geom name="stair_high25_left_up_3" class="terrain"
-                  type="box" size="0.125 2.0 0.375" pos="-1.625 0 0.375"
+                  type="box" size="0.125 1.0 0.375" pos="-1.625 -1.0 0.375"
+                  rgba="0.60 0.22 0.20 1"/>
+            <geom name="stair_high25_left_up_3_hollow" class="terrain"
+                  type="box" size="0.125 1.0 0.015" pos="-1.625 1.0 0.735"
                   rgba="0.60 0.22 0.20 1"/>
             <geom name="stair_high25_left_up_4" class="terrain"
-                  type="box" size="0.125 2.0 0.500" pos="-1.375 0 0.500"
+                  type="box" size="0.125 1.0 0.500" pos="-1.375 -1.0 0.500"
+                  rgba="0.54 0.17 0.15 1"/>
+            <geom name="stair_high25_left_up_4_hollow" class="terrain"
+                  type="box" size="0.125 1.0 0.015" pos="-1.375 1.0 0.985"
                   rgba="0.54 0.17 0.15 1"/>
             <geom name="stair_high25_left_up_5" class="terrain"
-                  type="box" size="0.125 2.0 0.625" pos="-1.125 0 0.625"
+                  type="box" size="0.125 1.0 0.625" pos="-1.125 -1.0 0.625"
+                  rgba="0.48 0.12 0.10 1"/>
+            <geom name="stair_high25_left_up_5_hollow" class="terrain"
+                  type="box" size="0.125 1.0 0.015" pos="-1.125 1.0 1.235"
                   rgba="0.48 0.12 0.10 1"/>
             <geom name="stair_high25_left_platform" class="terrain"
                   type="box" size="1.0 2.0 0.625" pos="0 0 0.625"
                   rgba="0.35 0.45 0.35 1"/>
         </body>
 
-        <body name="terrain_high25_mid" pos="22.0 0.0 0">
+        <body name="terrain_high25_mid" pos="23.5 0.0 0">
             <geom name="stair_high25_mid_up_1" class="terrain"
-                  type="box" size="0.15 2.0 0.125" pos="-2.35 0 0.125"
+                  type="box" size="0.15 1.0 0.125" pos="-2.35 -1.0 0.125"
+                  rgba="0.72 0.34 0.30 1"/>
+            <geom name="stair_high25_mid_up_1_hollow" class="terrain"
+                  type="box" size="0.15 1.0 0.015" pos="-2.35 1.0 0.235"
                   rgba="0.72 0.34 0.30 1"/>
             <geom name="stair_high25_mid_up_2" class="terrain"
-                  type="box" size="0.15 2.0 0.250" pos="-2.05 0 0.250"
+                  type="box" size="0.15 1.0 0.250" pos="-2.05 -1.0 0.250"
+                  rgba="0.66 0.28 0.25 1"/>
+            <geom name="stair_high25_mid_up_2_hollow" class="terrain"
+                  type="box" size="0.15 1.0 0.015" pos="-2.05 1.0 0.485"
                   rgba="0.66 0.28 0.25 1"/>
             <geom name="stair_high25_mid_up_3" class="terrain"
-                  type="box" size="0.15 2.0 0.375" pos="-1.75 0 0.375"
+                  type="box" size="0.15 1.0 0.375" pos="-1.75 -1.0 0.375"
+                  rgba="0.60 0.22 0.20 1"/>
+            <geom name="stair_high25_mid_up_3_hollow" class="terrain"
+                  type="box" size="0.15 1.0 0.015" pos="-1.75 1.0 0.735"
                   rgba="0.60 0.22 0.20 1"/>
             <geom name="stair_high25_mid_up_4" class="terrain"
-                  type="box" size="0.15 2.0 0.500" pos="-1.45 0 0.500"
+                  type="box" size="0.15 1.0 0.500" pos="-1.45 -1.0 0.500"
+                  rgba="0.54 0.17 0.15 1"/>
+            <geom name="stair_high25_mid_up_4_hollow" class="terrain"
+                  type="box" size="0.15 1.0 0.015" pos="-1.45 1.0 0.985"
                   rgba="0.54 0.17 0.15 1"/>
             <geom name="stair_high25_mid_up_5" class="terrain"
-                  type="box" size="0.15 2.0 0.625" pos="-1.15 0 0.625"
+                  type="box" size="0.15 1.0 0.625" pos="-1.15 -1.0 0.625"
+                  rgba="0.48 0.12 0.10 1"/>
+            <geom name="stair_high25_mid_up_5_hollow" class="terrain"
+                  type="box" size="0.15 1.0 0.015" pos="-1.15 1.0 1.235"
                   rgba="0.48 0.12 0.10 1"/>
             <geom name="stair_high25_mid_platform" class="terrain"
                   type="box" size="1.0 2.0 0.625" pos="0 0 0.625"
                   rgba="0.35 0.45 0.35 1"/>
         </body>
 
-        <body name="terrain_high25_right" pos="22.0 -4.0 0">
+        <body name="terrain_high25_right" pos="23.5 -4.0 0">
             <geom name="stair_high25_right_up_1" class="terrain"
-                  type="box" size="0.175 2.0 0.125" pos="-2.575 0 0.125"
+                  type="box" size="0.175 1.0 0.125" pos="-2.575 -1.0 0.125"
+                  rgba="0.72 0.34 0.30 1"/>
+            <geom name="stair_high25_right_up_1_hollow" class="terrain"
+                  type="box" size="0.175 1.0 0.015" pos="-2.575 1.0 0.235"
                   rgba="0.72 0.34 0.30 1"/>
             <geom name="stair_high25_right_up_2" class="terrain"
-                  type="box" size="0.175 2.0 0.250" pos="-2.225 0 0.250"
+                  type="box" size="0.175 1.0 0.250" pos="-2.225 -1.0 0.250"
+                  rgba="0.66 0.28 0.25 1"/>
+            <geom name="stair_high25_right_up_2_hollow" class="terrain"
+                  type="box" size="0.175 1.0 0.015" pos="-2.225 1.0 0.485"
                   rgba="0.66 0.28 0.25 1"/>
             <geom name="stair_high25_right_up_3" class="terrain"
-                  type="box" size="0.175 2.0 0.375" pos="-1.875 0 0.375"
+                  type="box" size="0.175 1.0 0.375" pos="-1.875 -1.0 0.375"
+                  rgba="0.60 0.22 0.20 1"/>
+            <geom name="stair_high25_right_up_3_hollow" class="terrain"
+                  type="box" size="0.175 1.0 0.015" pos="-1.875 1.0 0.735"
                   rgba="0.60 0.22 0.20 1"/>
             <geom name="stair_high25_right_up_4" class="terrain"
-                  type="box" size="0.175 2.0 0.500" pos="-1.525 0 0.500"
+                  type="box" size="0.175 1.0 0.500" pos="-1.525 -1.0 0.500"
+                  rgba="0.54 0.17 0.15 1"/>
+            <geom name="stair_high25_right_up_4_hollow" class="terrain"
+                  type="box" size="0.175 1.0 0.015" pos="-1.525 1.0 0.985"
                   rgba="0.54 0.17 0.15 1"/>
             <geom name="stair_high25_right_up_5" class="terrain"
-                  type="box" size="0.175 2.0 0.625" pos="-1.175 0 0.625"
+                  type="box" size="0.175 1.0 0.625" pos="-1.175 -1.0 0.625"
+                  rgba="0.48 0.12 0.10 1"/>
+            <geom name="stair_high25_right_up_5_hollow" class="terrain"
+                  type="box" size="0.175 1.0 0.015" pos="-1.175 1.0 1.235"
                   rgba="0.48 0.12 0.10 1"/>
             <geom name="stair_high25_right_platform" class="terrain"
                   type="box" size="1.0 2.0 0.625" pos="0 0 0.625"
                   rgba="0.35 0.45 0.35 1"/>
         </body>
 
-        <body name="terrain_high25_row_ramp" pos="22.0 0 0">
+        <body name="terrain_high25_row_ramp" pos="23.5 0 0">
             <geom name="ramp_high25_row_down" class="terrain"
                   type="box" size="1.075291 6.0 0.025"
                   pos="1.860469 0 0.604657"
