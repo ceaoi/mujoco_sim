@@ -56,6 +56,13 @@ class Zb02wGyrateConfig(Zb02wFlatConfig):
     num_obs: int = 50
     is_rnn: bool = False
 
+
+@dataclass(frozen=True, kw_only=True)
+class Zb02wUprightConfig(Zb02wGyrateConfig):
+    policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/upright_mix/1_exported/policy.onnx"
+    num_obs: int = 53
+
+
 @dataclass(frozen=True, kw_only=True)
 class Zb02wGyrateFlatConfig(Zb02wGyrateConfig):
     policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/gyrate_flat/1_exported/policy.onnx"
