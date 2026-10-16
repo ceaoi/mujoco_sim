@@ -59,13 +59,11 @@ class Zb02wGyrateConfig(Zb02wFlatConfig):
 
 @dataclass(frozen=True, kw_only=True)
 class Zb02wUprightConfig(Zb02wGyrateConfig):
-    policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/upright_mix/1_exported/policy.onnx"
+    policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/su_flat_student/1_exported/policy.onnx"
     num_obs: int = 53
 
+    max_command_rate: tuple[float, ...] = (1.0, 1.0, 4.0)
 
-@dataclass(frozen=True, kw_only=True)
-class Zb02wGyrateFlatConfig(Zb02wGyrateConfig):
-    policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/gyrate_flat/1_exported/policy.onnx"
 
 @dataclass(frozen=True, kw_only=True)
 class Zb02wRoughConfig(Zb02wFlatConfig):

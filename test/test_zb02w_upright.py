@@ -3,22 +3,38 @@ from types import SimpleNamespace
 import numpy as np
 
 from mujoco_sim.configs import PROJECT_ROOT, Zb02wGyrateConfig, Zb02wUprightConfig
+from mujoco_sim.scripts.zb02w_flat import Zb02wFlatDeploy
 from mujoco_sim.scripts.zb02w_gyrate import Zb02wGyrateDeploy
 from mujoco_sim.scripts.zb02w_upright import Zb02wUprightDeploy
 
 
 class FakePolicy:
-    def __init__(self, action, h_out, mode0_h_out):
+    def __init__(self, action, routing_h_out, estimator_h_out):
         self.action = action
-        self.h_out = h_out
-        self.mode0_h_out = mode0_h_out
+        self.routing_h_out = routing_h_out
+        self.estimator_h_out = estimator_h_out
         self.requested_outputs = None
         self.inputs = None
 
     def run(self, requested_outputs, inputs):
         self.requested_outputs = requested_outputs
         self.inputs = inputs
-        return self.action, self.h_out, self.mode0_h_out
+        return self.action, self.routing_h_out, self.estimator_h_out
+
+
+class FakeInput:
+    def __init__(self, name, shape):
+        self.name = name
+        self.shape = shape
+
+
+class FakePolicyMetadata:
+    def get_inputs(self):
+        return [
+            FakeInput("obs", [1, 56]),
+            FakeInput("routing_h_in", [1, 1, 128]),
+            FakeInput("estimator_h_in", [2, 1, 64]),
+        ]
 
 
 def test_upright_config_uses_exported_moe_policy_and_policy_observation_size():
@@ -26,11 +42,33 @@ def test_upright_config_uses_exported_moe_policy_and_policy_observation_size():
 
     assert isinstance(config, Zb02wGyrateConfig)
     assert config.policy_path == (
-        PROJECT_ROOT / "logs/rsl_rl/upright_mix/1_exported/policy.onnx"
+        PROJECT_ROOT / "logs/rsl_rl/su_flat_student/1_exported/policy.onnx"
     )
     assert config.num_obs == 53
     assert config.num_actions == 16
     assert not config.is_rnn
+
+
+def test_upright_initializes_hidden_states_from_onnx_metadata(monkeypatch):
+    def fake_flat_init(deploy, config, device):
+        deploy.num_obs = config.num_obs
+        deploy.num_wheels = 4
+        deploy.sim_dt = config.simulation_dt
+        deploy.tau = np.zeros(config.num_actions, dtype=np.float32)
+        deploy.policy = FakePolicyMetadata()
+
+    monkeypatch.setattr(Zb02wFlatDeploy, "__init__", fake_flat_init)
+
+    deploy = Zb02wUprightDeploy(
+        Zb02wUprightConfig(plotjuggler_enabled=False)
+    )
+
+    assert deploy.mode == 0
+    assert deploy.model_in.shape == (56,)
+    assert deploy.routing_h_in.shape == (1, 1, 128)
+    assert deploy.estimator_h_in.shape == (2, 1, 64)
+    assert deploy.routing_h_in.dtype == np.float32
+    assert deploy.estimator_h_in.dtype == np.float32
 
 
 def test_upright_observation_matches_training_order_and_scaling():
@@ -95,14 +133,14 @@ def test_upright_model_input_appends_mode_one_hot():
 def test_upright_policy_inference_updates_both_hidden_states_and_targets():
     deploy = object.__new__(Zb02wUprightDeploy)
     deploy.model_in = np.arange(56, dtype=np.float32)
-    deploy.h_in = np.zeros((1, 1, 256), dtype=np.float32)
-    deploy.mode0_h_in = np.zeros((3, 1, 256), dtype=np.float32)
+    deploy.routing_h_in = np.zeros((1, 1, 256), dtype=np.float32)
+    deploy.estimator_h_in = np.zeros((1, 1, 256), dtype=np.float32)
     deploy.policy_input_name = "obs"
     deploy.policy_output_name = "actions"
     action = np.arange(16, dtype=np.float32)[None, :]
-    h_out = np.ones((1, 1, 256), dtype=np.float32)
-    mode0_h_out = np.full((3, 1, 256), 2.0, dtype=np.float32)
-    deploy.policy = FakePolicy(action, h_out, mode0_h_out)
+    routing_h_out = np.ones((1, 1, 256), dtype=np.float32)
+    estimator_h_out = np.full((1, 1, 256), 2.0, dtype=np.float32)
+    deploy.policy = FakePolicy(action, routing_h_out, estimator_h_out)
     deploy.num_actions_pos = 12
     deploy.action_scale_pos = np.float32(0.5)
     deploy.action_scale_vel = np.float32(20.0)
@@ -116,14 +154,18 @@ def test_upright_policy_inference_updates_both_hidden_states_and_targets():
 
     assert deploy.policy.requested_outputs == [
         "actions",
-        "h_out",
-        "mode0_h_out",
+        "routing_h_out",
+        "estimator_h_out",
     ]
-    assert set(deploy.policy.inputs) == {"obs", "h_in", "mode0_h_in"}
+    assert set(deploy.policy.inputs) == {
+        "obs",
+        "routing_h_in",
+        "estimator_h_in",
+    }
     assert deploy.policy.inputs["obs"].shape == (1, 56)
     assert deploy.policy.inputs["obs"].dtype == np.float32
-    np.testing.assert_array_equal(deploy.h_in, h_out)
-    np.testing.assert_array_equal(deploy.mode0_h_in, mode0_h_out)
+    np.testing.assert_array_equal(deploy.routing_h_in, routing_h_out)
+    np.testing.assert_array_equal(deploy.estimator_h_in, estimator_h_out)
     np.testing.assert_array_equal(deploy.action, action.squeeze(0))
     np.testing.assert_allclose(
         deploy.targ_dof_pos,
@@ -145,8 +187,8 @@ def test_upright_reset_clears_mode_and_both_hidden_states():
     deploy.wheel_stop_pid_active = True
     deploy.is_rnn = False
     deploy.mode = 2
-    deploy.h_in = np.ones((1, 1, 256), dtype=np.float32)
-    deploy.mode0_h_in = np.ones((3, 1, 256), dtype=np.float32)
+    deploy.routing_h_in = np.ones((1, 1, 256), dtype=np.float32)
+    deploy.estimator_h_in = np.ones((1, 1, 256), dtype=np.float32)
     deploy.tau = np.ones(16, dtype=np.float32)
     deploy._target_tau = np.ones(16, dtype=np.float32)
     deploy._tau_response_delta = np.ones(16, dtype=np.float32)
@@ -154,10 +196,13 @@ def test_upright_reset_clears_mode_and_both_hidden_states():
     deploy._reset_control()
 
     assert deploy.mode == 0
-    np.testing.assert_array_equal(deploy.h_in, np.zeros_like(deploy.h_in))
     np.testing.assert_array_equal(
-        deploy.mode0_h_in,
-        np.zeros_like(deploy.mode0_h_in),
+        deploy.routing_h_in,
+        np.zeros_like(deploy.routing_h_in),
+    )
+    np.testing.assert_array_equal(
+        deploy.estimator_h_in,
+        np.zeros_like(deploy.estimator_h_in),
     )
     np.testing.assert_array_equal(deploy.tau, np.zeros_like(deploy.tau))
     np.testing.assert_array_equal(

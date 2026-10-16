@@ -6,21 +6,41 @@ from mujoco_sim.scripts.zb02w_gyrate import Zb02wGyrateDeploy
 
 
 class Zb02wUprightDeploy(Zb02wGyrateDeploy):
-    """Deploy the upright residual MoE policy with both GRU states."""
+    """Deploy the upright student MoE policy with both GRU states."""
 
     def __init__(self, config: Zb02wUprightConfig, device="cpu"):
-        super().__init__(config, device)
+        # Skip Zb02wGyrateDeploy.__init__: the gyrate policy exposes a single
+        # h_in state, while StudentMoE exports explicit routing and estimator
+        # GRU states.
+        Zb02wFlatDeploy.__init__(self, config, device)
+        self._init_tau_response()
+
+        self.mode = 0
+        self.model_in = np.zeros(
+            self.num_obs + self.num_modes,
+            dtype=np.float32,
+        )
 
         policy_inputs = {item.name: item for item in self.policy.get_inputs()}
-        mode0_h_shape = self._concrete_recurrent_state_shape(
-            policy_inputs["mode0_h_in"].shape,
-            "mode0_h_in",
+        routing_h_shape = self._concrete_recurrent_state_shape(
+            policy_inputs["routing_h_in"].shape,
+            "routing_h_in",
         )
-        self.mode0_h_in = np.zeros(mode0_h_shape, dtype=np.float32)
+        estimator_h_shape = self._concrete_recurrent_state_shape(
+            policy_inputs["estimator_h_in"].shape,
+            "estimator_h_in",
+        )
+        self.routing_h_in = np.zeros(routing_h_shape, dtype=np.float32)
+        self.estimator_h_in = np.zeros(estimator_h_shape, dtype=np.float32)
 
     def _reset_control(self):
-        super()._reset_control()
-        self.mode0_h_in[:] = 0.0
+        Zb02wFlatDeploy._reset_control(self)
+        self.tau[:] = 0.0
+        self._target_tau[:] = 0.0
+        self._tau_response_delta[:] = 0.0
+        self.mode = 0
+        self.routing_h_in[:] = 0.0
+        self.estimator_h_in[:] = 0.0
 
     def update_obs(self):
         """Build the 53-dimensional policy observation used during training."""
@@ -38,20 +58,27 @@ class Zb02wUprightDeploy(Zb02wGyrateDeploy):
         if inp.ndim == 1:
             inp = inp[None, :]
 
-        action, h_out, mode0_h_out = self.policy.run(
-            [self.policy_output_name, "h_out", "mode0_h_out"],
+        action, routing_h_out, estimator_h_out = self.policy.run(
+            [
+                self.policy_output_name,
+                "routing_h_out",
+                "estimator_h_out",
+            ],
             {
                 self.policy_input_name: inp,
-                "h_in": np.ascontiguousarray(self.h_in, dtype=np.float32),
-                "mode0_h_in": np.ascontiguousarray(
-                    self.mode0_h_in,
+                "routing_h_in": np.ascontiguousarray(
+                    self.routing_h_in,
+                    dtype=np.float32,
+                ),
+                "estimator_h_in": np.ascontiguousarray(
+                    self.estimator_h_in,
                     dtype=np.float32,
                 ),
             },
         )
         self.action = np.asarray(action, dtype=np.float32).squeeze()
-        self.h_in = np.asarray(h_out, dtype=np.float32)
-        self.mode0_h_in = np.asarray(mode0_h_out, dtype=np.float32)
+        self.routing_h_in = np.asarray(routing_h_out, dtype=np.float32)
+        self.estimator_h_in = np.asarray(estimator_h_out, dtype=np.float32)
 
         self.send_plotjuggler_data("actions", self.action)
         self.targ_dof_pos = (

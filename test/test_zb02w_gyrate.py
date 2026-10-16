@@ -4,7 +4,6 @@ import numpy as np
 
 from mujoco_sim.configs import Zb02wGyrateConfig
 from mujoco_sim.scripts.zb02w_gyrate import Zb02wGyrateDeploy
-from mujoco_sim.scripts.zb02w_gyrate_flat import Zb02wGyrateFlatDeploy
 from mujoco_sim.scripts.zb02w_flat import Zb02wFlatDeploy
 
 
@@ -241,6 +240,5 @@ def test_tau_response_reaches_95_percent_after_one_millisecond():
     np.testing.assert_array_equal(telemetry[-1][1], deploy.tau)
 
 
-def test_tau_response_is_shared_only_by_gyrate_deployments():
-    assert Zb02wGyrateFlatDeploy.update_tau is Zb02wGyrateDeploy.update_tau
+def test_gyrate_uses_distinct_tau_response_from_flat_deployment():
     assert Zb02wFlatDeploy.update_tau is not Zb02wGyrateDeploy.update_tau

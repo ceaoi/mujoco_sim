@@ -179,7 +179,7 @@ run_script.py
 - `MujocoDeploy`：接收 `MujocoSimConfig` 配置对象，统一管理可选 PlotJuggler 发送器，并负责合并 XML、创建 MuJoCo model/data、处理手柄、相机、重置、弹丸和实时仿真循环。
 - `MujocoDeployWl`：使用 ONNX Runtime 的 CPU provider 推理，支持普通策略和带 `h_in/c_in` 的 RNN 策略，并把 16 维动作拆分为 12 个腿关节位置目标和 4 个轮关节速度目标。
 - `Zb02wGyrateDeploy`：在 50 维 policy 观测后拼接 mode one-hot，并单独维护 GRU 的 `h_in/h_out`；不使用通用基类面向 LSTM 的 `h_in/c_in` 路径。
-- `Zb02wUprightDeploy`：复用多模式切换和扭矩响应，在 53 维 policy 观测后拼接 mode one-hot，并维护主 encoder 与 mode 0 expert 的两组 GRU hidden state。
+- `Zb02wUprightDeploy`：复用多模式切换和扭矩响应，在 53 维 policy 观测后拼接 mode one-hot，并维护 routing encoder 与 latent estimator 的两组 GRU hidden state。
 - `MujocoDeployWh`：轻量扩展点；WH044X 的底盘模式切换和运动学控制实现在 `scripts/wh044x.py`。
 
 ## ZB02W 多模式 GRU MoE 策略
@@ -205,16 +205,16 @@ mode one-hot 的顺序与训练端一致：
 
 ### Upright 双 GRU ONNX 接口
 
-`zb02w_upright` 默认加载 `logs/rsl_rl/upright_mix/1_exported/policy.onnx`。53 维 policy 观测由角速度、重力投影、腿关节位置、全部关节速度、上一动作和速度指令组成，再拼接 3 维 mode one-hot。导出模型采用固定 batch size 1：
+`zb02w_upright` 默认加载 `logs/rsl_rl/su_flat_student/1_exported/policy.onnx`。53 维 policy 观测由角速度、重力投影、腿关节位置、全部关节速度、上一动作和速度指令组成，再拼接 3 维 mode one-hot。导出模型采用固定 batch size 1：
 
 | 类型 | 名称 | 形状 | 说明 |
 |---|---|---|---|
 | 输入 | `obs` | `(1, 56)` | 53 维 policy 观测后拼接 3 维 mode one-hot |
-| 输入 | `h_in` | `(1, 1, 256)` | residual MoE 主 GRU hidden state |
-| 输入 | `mode0_h_in` | `(3, 1, 256)` | mode 0 expert GRU hidden state |
+| 输入 | `routing_h_in` | `(1, 1, 256)` | routing encoder GRU hidden state |
+| 输入 | `estimator_h_in` | `(1, 1, 256)` | latent estimator GRU hidden state |
 | 输出 | `actions` | `(1, 16)` | 12 个腿关节动作和 4 个轮子动作 |
-| 输出 | `h_out` | `(1, 1, 256)` | 下一控制步使用的主 GRU hidden state |
-| 输出 | `mode0_h_out` | `(3, 1, 256)` | 下一控制步使用的 mode 0 expert hidden state |
+| 输出 | `routing_h_out` | `(1, 1, 256)` | 下一控制步使用的 routing encoder hidden state |
+| 输出 | `estimator_h_out` | `(1, 1, 256)` | 下一控制步使用的 latent estimator hidden state |
 
 模式切换规则与 `zb02w_gyrate` 相同。切换时两组状态均由策略连续更新；仿真重置时全部清零。
 
