@@ -1,6 +1,6 @@
 # MuJoCo Sim
 
-`mujoco_sim` 用于把训练得到的 ONNX 运动策略部署到 MuJoCo，并通过 Xbox 类手柄实时控制机器人。当前包含 M20、ZB02W 两类轮足机器人，以及 WH044X 四轮转向底盘；M20 和 ZB02W 均提供平地、粗糙地形入口，ZB02W 还提供多模式 GRU MoE、student 策略和深度相机入口。
+`mujoco_sim` 用于把训练得到的 ONNX 运动策略部署到 MuJoCo，并通过 Xbox 类手柄实时控制机器人。当前包含 M20、ZB02W、XG 三类轮足机器人，以及 WH044X 四轮转向底盘；M20 和 ZB02W 均提供平地、粗糙地形入口，ZB02W 还提供多模式 GRU MoE、student 策略和深度相机入口，XG 提供 student 策略入口。
 
 仿真启动时会把机器人模型、弹丸模型以及可选地形合并成 `tmp_merged.xml`，随后以 MuJoCo 仿真步长运行。控制器每隔 `control_decimation` 个仿真步更新一次；当前入口的控制周期均为 20 ms（50 Hz）。
 
@@ -16,6 +16,7 @@
 | `zb02w_upright` | ZB02W / 平地起身多模式 | `Zb02wUprightConfig` | 双 GRU residual MoE 策略；X / Y / B 选择 mode |
 | `zb02w_ts` | ZB02W / 台阶地形 | `Zb02wTsConfig` | student RNN ONNX 策略；启用轮子静止 PID |
 | `zb02w_depth` | ZB02W / 台阶地形 | `Zb02wDepthConfig` | TS 控制逻辑；固定式 64×36 深度相机和 Matplotlib 预览 |
+| `xg_ts` | XG / 台阶地形 | `XgTsConfig` | student RNN ONNX 策略；启用轮子静止 PID |
 | `wh044x` | WH044X / 平地 | `Wh044xConfig` | C++ `chassis` 运动学解算；直接写入转向和轮速 actuator control |
 
 ## 工作区与外部资源
@@ -23,17 +24,20 @@
 配置类使用 `pathlib.Path` 根据 `mujoco_sim` 和项目根目录直接构造绝对路径。默认配置依赖如下工作区布局：
 
 ```text
-wl_lab/
-├── mujoco_sim/                         # 本项目
-├── logs/rsl_rl/.../policy.onnx         # M20 / ZB02W 导出的策略
-├── source/.../zb02w/mjcf/mjcf/zb02w.xml
-├── robots/wh044x/mjcf/wh044x_generated.xml  # WH044X，需另行提供
-└── build/chassis*.so                   # WH044X C++ Python 扩展，需另行构建
+projLab/
+├── xg_lab/
+│   ├── mujoco_sim/                         # 本项目
+│   ├── logs/rsl_rl/.../policy.onnx         # M20 / ZB02W / XG 导出的策略
+│   ├── source/.../zb02w/mjcf/mjcf/zb02w.xml
+│   ├── robots/wh044x/mjcf/wh044x_generated.xml  # WH044X，需另行提供
+│   └── build/chassis*.so                   # WH044X C++ Python 扩展，需另行构建
+└── wl_loco/wl_loco/assets/robots/xg/mjcf/mjcf/xg.xml
 ```
 
 - M20 的 MJCF 和 mesh 已包含在 `mujoco_sim/robots/M20_mjcf/`。
 - ZB02W 的 MJCF 默认从主工作区的 `source/` 目录读取。
-- M20、ZB02W 的 ONNX 策略默认从主工作区的 `logs/rsl_rl/` 读取。
+- XG 的 MJCF 默认从相邻 `wl_loco` 仓库读取；启动前需保持该目录可写，以便生成 `tmp_merged.xml`。
+- M20、ZB02W、XG 的 ONNX 策略默认从主工作区的 `logs/rsl_rl/` 读取；`xg_ts` 需要先导出 `logs/rsl_rl/xg_student/1_exported/policy.onnx`。
 - WH044X 还要求 `Wh044xConfig` 中的 `xml_path` 和 `chassis_build_dir` 指向有效资源。
 
 如果本地目录不同，请继承对应配置类并覆盖 `policy_path`、`xml_path`、`terrain_xml_path` 或 `chassis_build_dir`。机器人 XML 所在目录必须可写，因为启动时会在该目录生成临时的 `tmp_merged.xml`。
@@ -71,6 +75,9 @@ python mujoco_sim/run_script.py --filename=zb02w_upright
 python mujoco_sim/run_script.py --filename=zb02w_ts
 python mujoco_sim/run_script.py --filename=zb02w_depth
 
+# XG
+python mujoco_sim/run_script.py --filename=xg_ts
+
 # WH044X（需要外部模型和 chassis 扩展）
 python mujoco_sim/run_script.py --filename=wh044x
 ```
@@ -89,7 +96,7 @@ python -m mujoco_sim.utils.gamepad_pygame --index 0 --hz 20
 
 ## Base 状态 HUD
 
-使用原生 MuJoCo viewer 时，所有继承 `MujocoDeploy` 的入口都会在界面左上角显示 Base 状态，无需增加额外配置。远程 mjviser 模式不显示该原生 HUD。默认 Base 是合并模型中第一个 `<freejoint/>` 所属的 body；当前 M20、ZB02W 和 WH044X 均先合并机器人、再合并弹丸，因此会选择机器人 Base，而不是弹丸的 free joint。
+使用原生 MuJoCo viewer 时，所有继承 `MujocoDeploy` 的入口都会在界面左上角显示 Base 状态，无需增加额外配置。远程 mjviser 模式不显示该原生 HUD。默认 Base 是合并模型中第一个 `<freejoint/>` 所属的 body；当前 M20、ZB02W、XG 和 WH044X 均先合并机器人、再合并弹丸，因此会选择机器人 Base，而不是弹丸的 free joint。
 
 HUD 以固定 20 Hz 刷新，数值保留三位小数；相机和 viewer 画面同步仍保持原有频率。当前 `simulation_dt=0.0005 s` 时，每 100 个仿真步更新一次 HUD。显示字段如下：
 
@@ -278,7 +285,7 @@ class Zb02wTsConfig(Zb02wRoughConfig):
     wheel_stop_pid_output_limit: float = 20.0
 ```
 
-其余现有 M20 / ZB02W 配置默认关闭停车 PID。调参时建议先限制 `wheel_stop_pid_output_limit`，再依次调整 `kp`、`ki` 和 `kd`，并观察停车阶段的各轮速度及目标轮速，避免振荡或积分累积过快。当前代码中的 `wheel_action_vel_deadzone` 仅被读取，相关死区处理已注释，因此该字段不会使策略轮速自动归零。
+`XgTsConfig` 使用相同的停车 PID 参数，其余现有 M20 / ZB02W 配置默认关闭停车 PID。调参时建议先限制 `wheel_stop_pid_output_limit`，再依次调整 `kp`、`ki` 和 `kd`，并观察停车阶段的各轮速度及目标轮速，避免振荡或积分累积过快。当前代码中的 `wheel_action_vel_deadzone` 仅被读取，相关死区处理已注释，因此该字段不会使策略轮速自动归零。
 
 ## 配置要点
 
@@ -289,22 +296,23 @@ MujocoSimConfig
 ├── WheelLeggedConfig
 │   ├── M20FlatConfig
 │   │   └── M20RoughConfig
-│   └── Zb02wFlatConfig
-│       ├── Zb02wGyrateConfig
-│       │   └── Zb02wUprightConfig
-│       └── Zb02wRoughConfig
-│           └── Zb02wTsConfig
-│               └── Zb02wDepthConfig
+│   ├── Zb02wFlatConfig
+│   │   ├── Zb02wGyrateConfig
+│   │   │   └── Zb02wUprightConfig
+│   │   └── Zb02wRoughConfig
+│   │       └── Zb02wTsConfig
+│   │           └── Zb02wDepthConfig
+│   └── XgTsConfig
 └── Wh044xConfig
 ```
 
-Rough 和 TS 配置继承对应机器人的 Flat 配置，只声明有差异的字段。所有序列参数使用 tuple；需要调整配置时应继续创建子类，而不是修改已有配置实例。
+M20 / ZB02W 的 Rough 和 TS 配置继承对应机器人的 Flat 配置；XG 当前仅提供独立的 TS 配置。所有序列参数使用 tuple；需要调整配置时应继续创建子类，而不是修改已有配置实例。
 
 | 字段 | 作用 |
 |---|---|
 | `simulation_dt` | MuJoCo 仿真步长 |
 | `control_decimation` | 每多少个仿真步更新一次策略 / 控制指令 |
-| `policy_path` | M20 / ZB02W 的 ONNX 策略路径 |
+| `policy_path` | M20 / ZB02W / XG 的 ONNX 策略路径 |
 | `xml_path` | 机器人 MJCF 路径 |
 | `terrain_xml_path` | 可选地形 MJCF；rough 配置使用 |
 | `plotjuggler_enabled` | 是否启用可选 PlotJuggler UDP 遥测；轮足配置默认开启，其他配置默认关闭 |
@@ -323,7 +331,7 @@ Rough 和 TS 配置继承对应机器人的 Flat 配置，只声明有差异的�
 | `kpsPos`, `kdsPos`, `kpsVel`, `kdsVel` | 腿位置 PD 与轮速度 PD 增益 |
 | `action_scale_pos`, `action_scale_vel` | 策略动作到目标位置 / 速度的缩放 |
 | `cmd_range`, `cmd_deadzone` | 手柄速度范围与死区 |
-| `max_command_rate` | M20 / ZB02W 指令变化率上限 |
+| `max_command_rate` | M20 / ZB02W / XG 指令变化率上限 |
 | `remote_enabled` | 是否同时启用 TCP 虚拟手柄和 mjviser Web viewer；默认关闭 |
 | `remote_host` | 两个远程服务的监听地址；默认 `127.0.0.1` |
 | `remote_gamepad_port`, `remote_viewer_port` | 虚拟手柄与 Web viewer 端口；默认分别为 `5555`、`8080` |
@@ -355,6 +363,7 @@ mujoco_sim/
 │   ├── zb02w_upright.py
 │   ├── zb02w_ts.py
 │   ├── zb02w_depth.py
+│   ├── xg_ts.py
 │   └── wh044x.py
 ├── robots/
 │   ├── M20_mjcf/              # M20 模型与 mesh
