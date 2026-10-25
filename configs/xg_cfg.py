@@ -32,7 +32,7 @@ class XgTsConfig(WheelLeggedConfig):
         -0.8, -0.8, 0.8, 0.8,
     )
 
-    max_command_rate: tuple[float, ...] = (10.0, 4.0, 4.0)
+    max_command_rate: tuple[float, ...] = (2.0, 2.0, 2.0)
     action_scale_pos: float = 0.5
     action_scale_vel: float = 20.0
 
@@ -42,10 +42,10 @@ class XgTsConfig(WheelLeggedConfig):
     num_obs_hist: int = 10
 
     cmd_init: tuple[float, ...] = (0.0, 0.0, 0.0)
-    cmd_range: tuple[float, ...] = (4.0, 1.5, 1.5)
+    cmd_range: tuple[float, ...] = (2.0, 1.5, 1.5)
     cmd_deadzone: tuple[float, ...] = (0.0001, 0.01, 0.01)
     wheel_action_vel_deadzone: float = 0.0
-    wheel_stop_pid_enabled: bool = True
+    wheel_stop_pid_enabled: bool = False
     wheel_stop_pid_kp: float = 1.0
     wheel_stop_pid_ki: float = 2.0
     wheel_stop_pid_kd: float = 0.00005
