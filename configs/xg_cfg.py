@@ -5,12 +5,11 @@ from .base_cfg import MUJOCO_SIM_ROOT, PROJECT_ROOT, WheelLeggedConfig
 
 
 @dataclass(frozen=True, kw_only=True)
-class XgTsConfig(WheelLeggedConfig):
-    """XG recurrent student deployment on rough terrain."""
+class XgFlatConfig(WheelLeggedConfig):
+    """XG feed-forward policy deployment on flat terrain."""
 
-    policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/xg_student/1_exported/policy.onnx"
+    policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/xg_teacher_flat1/1_exported/policy.onnx"
     xml_path: Path = PROJECT_ROOT / "../wl_loco/wl_loco/assets/robots/xg/mjcf/mjcf/xg.xml"
-    terrain_xml_path: Path | None = MUJOCO_SIM_ROOT / "assets/terrains/rough_stairs.xml"
 
     simulation_dt: float = 0.0005
     control_decimation: int = 40
@@ -50,4 +49,13 @@ class XgTsConfig(WheelLeggedConfig):
     wheel_stop_pid_ki: float = 2.0
     wheel_stop_pid_kd: float = 0.00005
     wheel_stop_pid_output_limit: float = 20.0
+    is_rnn: bool = False
+
+
+@dataclass(frozen=True, kw_only=True)
+class XgTsConfig(XgFlatConfig):
+    """XG recurrent student deployment on rough terrain."""
+
+    policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/xg_student/1_exported/policy.onnx"
+    terrain_xml_path: Path | None = MUJOCO_SIM_ROOT / "assets/terrains/rough_stairs.xml"
     is_rnn: bool = True
