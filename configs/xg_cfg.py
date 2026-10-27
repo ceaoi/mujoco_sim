@@ -21,10 +21,10 @@ class XgFlatConfig(WheelLeggedConfig):
     leg_actions_to_mujoco: tuple[int, ...] = (0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14)
     wheel_actions_to_mujoco: tuple[int, ...] = (3, 7, 11, 15)
 
-    kpsPos: tuple[float, ...] = (160.0,) * 12
-    kdsPos: tuple[float, ...] = (3.0,) * 12
+    kpsPos: tuple[float, ...] = (80.0,) * 12
+    kdsPos: tuple[float, ...] = (1.5,) * 12
     kpsVel: tuple[float, ...] = (0.0,) * 4
-    kdsVel: tuple[float, ...] = (0.5,) * 4
+    kdsVel: tuple[float, ...] = (0.25,) * 4
     default_angles_leg: tuple[float, ...] = (
         -0.1, 0.1, -0.1, 0.1,
         0.4, 0.4, -0.4, -0.4,
