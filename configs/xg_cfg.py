@@ -26,7 +26,7 @@ class XgFlatConfig(WheelLeggedConfig):
     kpsVel: tuple[float, ...] = (0.0,) * 4
     kdsVel: tuple[float, ...] = (0.25,) * 4
     default_angles_leg: tuple[float, ...] = (
-        -0.1, 0.1, -0.1, 0.1,
+        -0.05, 0.05, -0.05, 0.05,
         0.4, 0.4, -0.4, -0.4,
         -0.8, -0.8, 0.8, 0.8,
     )
