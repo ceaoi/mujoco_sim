@@ -41,7 +41,7 @@ class XgFlatConfig(WheelLeggedConfig):
     num_obs_hist: int = 10
 
     cmd_init: tuple[float, ...] = (0.0, 0.0, 0.0)
-    cmd_range: tuple[float, ...] = (2.0, 1.0, 1.0)
+    cmd_range: tuple[float, ...] = (4.0, 1.0, 1.5)
     cmd_deadzone: tuple[float, ...] = (0.0001, 0.01, 0.01)
     wheel_action_vel_deadzone: float = 0.0
     wheel_stop_pid_enabled: bool = False
@@ -59,3 +59,14 @@ class XgTsConfig(XgFlatConfig):
     policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/xg_student/1_exported/policy.onnx"
     terrain_xml_path: Path | None = MUJOCO_SIM_ROOT / "assets/terrains/rough_stairs.xml"
     is_rnn: bool = True
+
+
+@dataclass(frozen=True, kw_only=True)
+class XgTsGaitConfig(XgTsConfig):
+    """XG student with two gait phases appended to its 53-D policy observations."""
+
+    num_obs: int = 55
+    gait_period: float = 0.36
+    gait_command_threshold: float = 0.01
+    gait_acceleration_threshold: float = 5.0
+    gait_angular_velocity_threshold: float = 0.5

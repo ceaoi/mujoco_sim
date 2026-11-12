@@ -4,7 +4,7 @@ import math
 
 import numpy as np
 
-from mujoco_sim.configs import M20FlatConfig
+from mujoco_sim.configs import M20FlatConfig, XgTsGaitConfig
 
 
 class GaitPhaseGenerator:
@@ -75,3 +75,59 @@ class GaitPhaseGenerator:
         out[0] = self.gait_phase
         out[1:] = self.gait_clock
         return out
+
+
+class XgGaitPhaseGenerator:
+    """Use XG's float32 gait clock with command and acceleration/rate triggers."""
+
+    def __init__(self, config: XgTsGaitConfig):
+        self.period = np.float32(config.gait_period)
+        self.dt = np.float32(config.control_decimation * config.simulation_dt)
+        self.command_threshold = np.float32(config.gait_command_threshold)
+        self.acceleration_threshold = np.float32(config.gait_acceleration_threshold)
+        self.angular_velocity_threshold = np.float32(config.gait_angular_velocity_threshold)
+        if not np.isfinite(self.period) or self.period <= 0:
+            raise ValueError("gait_period must be finite and positive")
+        if not np.isfinite(self.dt) or self.dt <= 0:
+            raise ValueError("gait control period must be finite and positive")
+        for name, threshold in (
+            ("gait_command_threshold", self.command_threshold),
+            ("gait_acceleration_threshold", self.acceleration_threshold),
+            ("gait_angular_velocity_threshold", self.angular_velocity_threshold),
+        ):
+            if not np.isfinite(threshold) or threshold < 0:
+                raise ValueError(f"{name} must be finite and non-negative")
+        self.reset()
+
+    def reset(self) -> None:
+        self.clock = np.float32(0.0)
+        self.phase_a = np.float32(0.0)
+        self.phase_b = np.float32(0.0)
+        self.walk_mode = False
+
+    @property
+    def observation(self) -> np.ndarray:
+        """Read the centered phase pair without advancing the clock."""
+        return np.array([self.phase_a, self.phase_b], dtype=np.float32) - np.float32(0.5)
+
+    def update(
+        self, cmd: np.ndarray, base_com_ay: float, base_ang_vel: np.ndarray
+    ) -> np.ndarray:
+        """Advance once after a completed control interval, using its command."""
+        command = np.asarray(cmd, dtype=np.float32)
+        angular_velocity = np.asarray(base_ang_vel, dtype=np.float32)
+        self.walk_mode = bool(
+            np.linalg.norm(command[1:3]) > self.command_threshold
+            or np.abs(np.float32(base_com_ay)) > self.acceleration_threshold
+            or np.abs(angular_velocity[0]) > self.angular_velocity_threshold
+            or np.abs(angular_velocity[2]) > self.angular_velocity_threshold
+        )
+        reset = not self.walk_mode and np.remainder(self.clock, self.period) <= self.dt
+        self.clock = np.float32(0.0) if reset else self.clock + self.dt
+        self.phase_a = np.remainder(self.clock, self.period) / self.period
+        self.phase_b = (
+            np.float32(0.0)
+            if reset
+            else np.remainder(self.phase_a + np.float32(0.5), np.float32(1.0))
+        )
+        return self.observation

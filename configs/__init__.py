@@ -2,7 +2,7 @@ from .base_cfg import MUJOCO_SIM_ROOT, PROJECT_ROOT, MujocoSimConfig, WheelLegge
 from .m20_cfg import M20FlatConfig, M20RoughConfig
 from .remote_file_sync_cfg import RemoteFileSyncConfig
 from .wh044x_cfg import Wh044xConfig
-from .xg_cfg import XgFlatConfig, XgTsConfig
+from .xg_cfg import XgFlatConfig, XgTsConfig, XgTsGaitConfig
 from .zb02w_cfg import (
     Zb02wDepthConfig,
     Zb02wFlatConfig,
@@ -23,6 +23,7 @@ __all__ = [
     "RemoteFileSyncConfig",
     "XgFlatConfig",
     "XgTsConfig",
+    "XgTsGaitConfig",
     "Zb02wFlatConfig",
     "Zb02wGyrateConfig",
     "Zb02wUprightConfig",

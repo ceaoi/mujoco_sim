@@ -17,6 +17,7 @@
 | `zb02w_ts` | ZB02W / 台阶地形 | `Zb02wTsConfig` | student RNN ONNX 策略；启用轮子静止 PID |
 | `zb02w_depth` | ZB02W / 台阶地形 | `Zb02wDepthConfig` | TS 控制逻辑；固定式 64×36 深度相机和 Matplotlib 预览 |
 | `xg_ts` | XG / 台阶地形 | `XgTsConfig` | student RNN ONNX 策略；启用轮子静止 PID |
+| `xg_ts_gait` | XG / 台阶地形 | `XgTsGaitConfig` | 55 维 student RNN；53 维本体观测 + 2 维 gait phase |
 | `wh044x` | WH044X / 平地 | `Wh044xConfig` | C++ `chassis` 运动学解算；直接写入转向和轮速 actuator control |
 
 ## 工作区与外部资源
@@ -36,11 +37,11 @@ projLab/
 
 - M20 的 MJCF 和 mesh 已包含在 `mujoco_sim/robots/M20_mjcf/`。
 - ZB02W 的 MJCF 默认从主工作区的 `source/` 目录读取。
-- XG 的 MJCF 默认从相邻 `wl_loco` 仓库读取；启动前需保持该目录可写，以便生成 `tmp_merged.xml`。
+- XG 的 MJCF 默认从相邻 `wl_loco` 仓库读取。`xg_ts_gait` 在临时目录合并 XML，支持外部资源只读；旧入口仍会在机器人目录生成 `tmp_merged.xml`。
 - M20、ZB02W、XG 的 ONNX 策略默认从主工作区的 `logs/rsl_rl/` 读取；`xg_ts` 需要先导出 `logs/rsl_rl/xg_student/1_exported/policy.onnx`。
 - WH044X 还要求 `Wh044xConfig` 中的 `xml_path` 和 `chassis_build_dir` 指向有效资源。
 
-如果本地目录不同，请继承对应配置类并覆盖 `policy_path`、`xml_path`、`terrain_xml_path` 或 `chassis_build_dir`。机器人 XML 所在目录必须可写，因为启动时会在该目录生成临时的 `tmp_merged.xml`。
+如果本地目录不同，请继承对应配置类并覆盖 `policy_path`、`xml_path`、`terrain_xml_path` 或 `chassis_build_dir`。除 `xg_ts_gait` 外，机器人 XML 所在目录必须可写，因为启动时会在该目录生成临时的 `tmp_merged.xml`。
 
 ## 安装
 
@@ -77,12 +78,54 @@ python mujoco_sim/run_script.py --filename=zb02w_depth
 
 # XG
 python mujoco_sim/run_script.py --filename=xg_ts
+conda run -n xg_lab python mujoco_sim/run_script.py --filename=xg_ts_gait
 
 # WH044X（需要外部模型和 chassis 扩展）
 python mujoco_sim/run_script.py --filename=wh044x
 ```
 
 `--filename` 可以省略 `.py`。入口只会从 `mujoco_sim/scripts/` 中查找脚本，不接受任意文件路径。
+
+### XG 两维 gait phase 学生
+
+`xg_ts_gait` 继承 `xg_ts` 的控制和观测组装，默认加载
+`logs/rsl_rl/xg_student/1_exported/policy.onnx`。启动时检查 ONNX 接口：
+`policy_obs (1,55)`、`h_in/c_in (3,1,256)`，输出
+`actions (1,16)`、`h_out/c_out (3,1,256)`。原 `xg_ts` 面向 53 维旧模型；
+当前默认文件如果已换成 55 维模型，应使用新入口。
+
+55 维输入按 `[policy(53), phase_a-0.5, phase_b-0.5]` 排列。
+`XgTsGaitConfig` 默认参数为 `gait_period=0.36s`、
+`gait_command_threshold=0.01`、`gait_acceleration_threshold=5.0m/s²`、
+`gait_angular_velocity_threshold=0.5rad/s`，
+控制周期为 `simulation_dt * control_decimation = 0.02s`。
+当 `norm(cmd[y,yaw]) > 0.01`、Base 系质心 `abs(ay) > 5.0m/s²`、
+`abs(wx) > 0.5rad/s` 或 `abs(wz) > 0.5rad/s` 任一条件成立时启动步态。
+所有比较均为严格 `>`，正负方向均可触发；y 轴角速度不参与判断，
+纯前进指令本身不会启动时钟。
+瞬时质心加速度由 MuJoCo 的 `J @ qacc + Jdot @ qvel` 计算后旋转至 Base 系，
+不额外叠加重力项，也不使用速度差分；角速度使用 Base free joint 的原始
+本体系 `rad/s` 数值，不使用 policy 观测的缩放值。
+部署触发条件已改为加速度/角速度，与训练端原来的横向速度触发条件不同；
+训练配置和奖励逻辑未修改。
+
+相位与训练端 `GlobalGait` 一致，使用 float32 秒时钟。
+停止步态时继续走到 `clock % period <= dt` 的周期边界再归零，
+两维静止观测为 `[-0.5,-0.5]`；方向反转不额外重置。
+每次推理读取上一控制周期生成的相位，重复读取观测不推进时钟。
+初次推理与手动 reset 都使用复位相位，并清空 LSTM 状态。
+旧 `GaitPhaseGenerator` 仍为 M20 的五维时钟；新入口使用独立的
+`XgGaitPhaseGenerator`。
+
+无窗口、无真实手柄的真实 ONNX 冒烟验证（500 控制周期，10 秒）可执行：
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 MUJOCO_GL=egl conda run -n xg_lab python -m pytest -q -s \
+  mujoco_sim/test/test_xg_ts_gait.py::test_real_model_runs_500_control_intervals_headless
+```
+
+该测试覆盖静止、前进、侧移、转向及停车指令，检查输入和仿真结果有限，
+用于验证部署链路，不作为策略运动性能验收。
 
 ### 运行前检查
 
