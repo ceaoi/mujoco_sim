@@ -78,7 +78,7 @@ class GaitPhaseGenerator:
 
 
 class XgGaitPhaseGenerator:
-    """Use XG's float32 gait clock with command and acceleration/rate triggers."""
+    """Use GlobalGait_s sin/cos phases with command and acceleration/rate triggers."""
 
     def __init__(self, config: XgTsGaitConfig):
         self.period = np.float32(config.gait_period)
@@ -102,13 +102,13 @@ class XgGaitPhaseGenerator:
     def reset(self) -> None:
         self.clock = np.float32(0.0)
         self.phase_a = np.float32(0.0)
-        self.phase_b = np.float32(0.0)
+        self.phase_b = np.float32(1.0)
         self.walk_mode = False
 
     @property
     def observation(self) -> np.ndarray:
-        """Read the centered phase pair without advancing the clock."""
-        return np.array([self.phase_a, self.phase_b], dtype=np.float32) - np.float32(0.5)
+        """Read [sin(angle), cos(angle)] without advancing the clock or shifting it."""
+        return np.array([self.phase_a, self.phase_b], dtype=np.float32)
 
     def update(
         self, cmd: np.ndarray, base_com_ay: float, base_ang_vel: np.ndarray
@@ -122,12 +122,11 @@ class XgGaitPhaseGenerator:
             or np.abs(angular_velocity[0]) > self.angular_velocity_threshold
             or np.abs(angular_velocity[2]) > self.angular_velocity_threshold
         )
-        reset = not self.walk_mode and np.remainder(self.clock, self.period) <= self.dt
-        self.clock = np.float32(0.0) if reset else self.clock + self.dt
-        self.phase_a = np.remainder(self.clock, self.period) / self.period
-        self.phase_b = (
-            np.float32(0.0)
-            if reset
-            else np.remainder(self.phase_a + np.float32(0.5), np.float32(1.0))
+        reset = not self.walk_mode and self.clock <= self.dt
+        self.clock = np.remainder(
+            np.float32(0.0) if reset else self.clock + self.dt, self.period
         )
+        angle = np.float32(2.0 * math.pi) * self.clock / self.period
+        self.phase_a = np.sin(angle)
+        self.phase_b = np.cos(angle)
         return self.observation

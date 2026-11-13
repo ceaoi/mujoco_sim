@@ -94,7 +94,8 @@ python mujoco_sim/run_script.py --filename=wh044x
 `actions (1,16)`、`h_out/c_out (3,1,256)`。原 `xg_ts` 面向 53 维旧模型；
 当前默认文件如果已换成 55 维模型，应使用新入口。
 
-55 维输入按 `[policy(53), phase_a-0.5, phase_b-0.5]` 排列。
+55 维输入按 `[policy(53), sin(2πt/T), cos(2πt/T)]` 排列，
+最后两维为原始 sin/cos，相位观测不减 `0.5`，与学生 `gait_phase_s` 一致。
 `XgTsGaitConfig` 默认参数为 `gait_period=0.36s`、
 `gait_command_threshold=0.01`、`gait_acceleration_threshold=5.0m/s²`、
 `gait_angular_velocity_threshold=0.5rad/s`，
@@ -109,9 +110,12 @@ python mujoco_sim/run_script.py --filename=wh044x
 部署触发条件已改为加速度/角速度，与训练端原来的横向速度触发条件不同；
 训练配置和奖励逻辑未修改。
 
-相位与训练端 `GlobalGait` 一致，使用 float32 秒时钟。
-停止步态时继续走到 `clock % period <= dt` 的周期边界再归零，
-两维静止观测为 `[-0.5,-0.5]`；方向反转不额外重置。
+相位与训练端 `GlobalGait_s` 一致，使用 float32 秒时钟。
+每步先判断 `not walk_mode and clock <= dt`，再将时钟清零或累加 `dt`，
+并对 `period` 取余；两维相位分别为 `sin(2π*clock/period)` 和
+`cos(2π*clock/period)`，范围为 `[-1,1]`。
+停止步态时继续走到时钟回绕且 `clock <= dt` 后归零，
+初次推理、reset 和静止归零后的观测均为 `[0,1]`；方向反转不额外重置。
 每次推理读取上一控制周期生成的相位，重复读取观测不推进时钟。
 初次推理与手动 reset 都使用复位相位，并清空 LSTM 状态。
 旧 `GaitPhaseGenerator` 仍为 M20 的五维时钟；新入口使用独立的

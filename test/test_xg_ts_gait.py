@@ -71,17 +71,17 @@ def test_generator_preserves_training_float32_clock_with_new_triggers():
                 | (omega[:, 0].abs() > config.gait_angular_velocity_threshold)
                 | (omega[:, 2].abs() > config.gait_angular_velocity_threshold)
             )
-            reset = (~mode) & (clock.remainder(config.gait_period) <= float(gait.dt))
-            clock = torch.where(reset, 0.0, clock + float(gait.dt))
-            phase_a = clock.remainder(config.gait_period) / config.gait_period
-            phase_b = (phase_a + 0.5).remainder(1.0) * (~reset).float()
-            expected = torch.stack((phase_a, phase_b), dim=-1)[0].numpy() - np.float32(0.5)
+            reset = (~mode) & (clock <= float(gait.dt))
+            clock = torch.where(reset, 0.0, clock + float(gait.dt)).remainder(config.gait_period)
+            angle = 2 * torch.pi * clock / config.gait_period
+            expected = torch.stack((angle.sin(), angle.cos()), dim=-1)[0].numpy()
             actual = gait.update(cmd[0].numpy(), acceleration, omega[0].numpy())
-            np.testing.assert_array_equal(actual, expected)
+            np.testing.assert_allclose(actual, expected, rtol=0.0, atol=1.0e-6)
             assert gait.clock == clock.item()
             assert gait.walk_mode == mode.item()
             assert actual.dtype == np.float32
-    np.testing.assert_array_equal(gait.observation, [-0.5, -0.5])
+            assert np.all(np.abs(actual) <= 1.0)
+    np.testing.assert_array_equal(gait.observation, [0.0, 1.0])
 
 
 @pytest.mark.parametrize("signal", ["ay", "wx", "wz"])
@@ -107,22 +107,24 @@ def test_pitch_rate_alone_does_not_trigger_gait():
     for pitch_rate in [-10.0, 10.0]:
         gait.update(np.zeros(3), 0.0, np.array([0.0, pitch_rate, 0.0]))
         assert not gait.walk_mode
-        np.testing.assert_array_equal(gait.observation, [-0.5, -0.5])
+        np.testing.assert_array_equal(gait.observation, [0.0, 1.0])
 
 
 def test_generator_reset_and_reads_do_not_advance_clock():
     gait = XgGaitPhaseGenerator(XgTsGaitConfig())
-    np.testing.assert_array_equal(gait.observation, [-0.5, -0.5])
+    np.testing.assert_array_equal(gait.observation, [0.0, 1.0])
     gait.update(np.array([0.0, 0.2, 0.0]), 0.0, np.zeros(3))
     before = gait.clock
     observation = gait.observation
     observation[:] = 99.0
     assert gait.clock == before
-    assert (gait.observation < 0.5).all()
+    assert (np.abs(gait.observation) <= 1.0).all()
+    assert np.linalg.norm(gait.observation) == pytest.approx(1.0)
     gait.reset()
-    assert gait.clock == gait.phase_a == gait.phase_b == 0.0
+    assert gait.clock == gait.phase_a == 0.0
+    assert gait.phase_b == 1.0
     assert not gait.walk_mode
-    np.testing.assert_array_equal(gait.observation, [-0.5, -0.5])
+    np.testing.assert_array_equal(gait.observation, [0.0, 1.0])
 
 
 def test_stop_on_first_tick_resets_at_inclusive_dt_boundary():
@@ -131,7 +133,7 @@ def test_stop_on_first_tick_resets_at_inclusive_dt_boundary():
     assert gait.clock == gait.dt
     gait.update(np.zeros(3), 0.0, np.zeros(3))
     assert gait.clock == 0.0
-    np.testing.assert_array_equal(gait.observation, [-0.5, -0.5])
+    np.testing.assert_array_equal(gait.observation, [0.0, 1.0])
 
 
 @pytest.mark.parametrize(
@@ -214,13 +216,14 @@ def test_phase_advances_once_per_completed_interval_using_previous_command(monke
     monkeypatch.setattr(XgTsDeploy, "step", parent_step)
     for _ in range(81):
         deploy.step()
-    np.testing.assert_array_equal(policy_phases[0], [-0.5, -0.5])
+    np.testing.assert_array_equal(policy_phases[0], [0.0, 1.0])
     assert len(policy_phases) == 3
     assert deploy.gait.clock == np.float32(0.04)
     assert deploy.gait.walk_mode
     assert deploy.cmd[1] == 0.0
-    assert policy_phases[1][0] == pytest.approx(0.02 / 0.36 - 0.5)
-    assert policy_phases[2][0] == pytest.approx(0.04 / 0.36 - 0.5)
+    for phase, clock in zip(policy_phases[1:], [0.02, 0.04]):
+        angle = 2 * np.pi * clock / 0.36
+        np.testing.assert_allclose(phase, [np.sin(angle), np.cos(angle)], atol=1.0e-6)
     for _ in range(40):
         deploy.step()
     assert deploy.gait.clock == np.float32(0.06)
@@ -303,7 +306,7 @@ def test_real_model_runs_500_control_intervals_headless(monkeypatch):
     assert not Path(deploy._scene_directory.name).exists()
     deploy.reset()
     mujoco.mj_forward(deploy.robot, deploy.data)
-    np.testing.assert_array_equal(deploy.obs[53:], [-0.5, -0.5])
+    np.testing.assert_array_equal(deploy.obs[53:], [0.0, 1.0])
     initial_phases = None
     commands = [
         (0.0, 0.0, 0.0), (0.2, 0.0, 0.0), (0.0, 0.2, 0.0),
@@ -320,13 +323,13 @@ def test_real_model_runs_500_control_intervals_headless(monkeypatch):
             for values in (deploy.obs, deploy.action, deploy.tau, deploy.h_in, deploy.c_in,
                            deploy.data.qpos, deploy.data.qvel):
                 assert np.isfinite(values).all()
-    np.testing.assert_array_equal(initial_phases, [-0.5, -0.5])
+    np.testing.assert_array_equal(initial_phases, [0.0, 1.0])
     assert deploy.counter == 500 * deploy.control_decimation
     print(f"XG_TS_GAIT_HEADLESS_OK intervals=500 time={deploy.data.time:.2f}s")
     deploy.reset()
     assert deploy.counter == 0
     assert deploy.gait.clock == 0
-    np.testing.assert_array_equal(deploy.obs[53:], [-0.5, -0.5])
+    np.testing.assert_array_equal(deploy.obs[53:], [0.0, 1.0])
     assert not deploy.h_in.any() and not deploy.c_in.any()
 
 

@@ -41,7 +41,7 @@ class XgFlatConfig(WheelLeggedConfig):
     num_obs_hist: int = 10
 
     cmd_init: tuple[float, ...] = (0.0, 0.0, 0.0)
-    cmd_range: tuple[float, ...] = (4.0, 1.0, 1.5)
+    cmd_range: tuple[float, ...] = (4.0, 0.8, 1.5)
     cmd_deadzone: tuple[float, ...] = (0.0001, 0.01, 0.01)
     wheel_action_vel_deadzone: float = 0.0
     wheel_stop_pid_enabled: bool = False
