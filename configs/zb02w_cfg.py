@@ -67,6 +67,19 @@ class Zb02wUprightConfig(Zb02wGyrateConfig):
 
 
 @dataclass(frozen=True, kw_only=True)
+class Zb02wUprightTsConfig(Zb02wUprightConfig):
+    policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/su_terrain_mix/1_exported/policy.onnx"
+    terrain_xml_path: Path | None = MUJOCO_SIM_ROOT / "assets/terrains/rough_stairs.xml"
+    control_decimation: int = 20
+    num_obs: int = 45
+    num_actions: int = 8
+    # The PD controller still targets all twelve leg joints.
+    kpsPos: tuple[float, ...] = (300.0,) * 4 + (160.0,) * 4 + (300.0,) * 2 + (160.0,) * 2
+    wheel_action_vel_deadzone: float = 0.01
+    is_rnn: bool = True
+
+
+@dataclass(frozen=True, kw_only=True)
 class Zb02wRoughConfig(Zb02wFlatConfig):
     policy_path: Path = PROJECT_ROOT / "logs/rsl_rl/zb02w_rough/1_exported/policy.onnx"
     terrain_xml_path: Path | None = MUJOCO_SIM_ROOT / "assets/terrains/rough_stairs.xml"

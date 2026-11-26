@@ -272,6 +272,41 @@ mode one-hot 的顺序与训练端一致：
 
 模式切换规则与 `zb02w_gyrate` 相同。切换时两组状态均由策略连续更新；仿真重置时全部清零。
 
+### Upright TS 复杂地形 LSTM 策略
+
+`zb02w_upright_ts` 继承 `Zb02wUprightDeploy`，运行训练端 `teacher_moe.py` 中
+`StudentMoEActor` 导出的策略。默认模型为
+`logs/rsl_rl/su_terrain_mix/1_exported/policy.onnx`，默认加载
+`assets/terrains/rough_stairs.xml` 中的多组台阶、斜坡和高平台；机器人从原点平地开始。
+
+```bash
+conda run -n abt_wl python mujoco_sim/run_script.py --filename zb02w_upright_ts
+```
+
+| 类型 | 名称 | 形状 | 说明 |
+|---|---|---|---|
+| 输入 | `obs` | `(1, 98)` | `[policy 45, foot_height 6, privileged 45, mode 2]` |
+| 输入 | `h_in` / `c_in` | `(3, 1, 256)` | student LSTM 的 hidden / cell state |
+| 输出 | `actions` | `(1, 8)` | 6 个腿位置动作和 2 个后轮速度动作 |
+| 输出 | `h_out` / `c_out` | `(3, 1, 256)` | 下一控制步的 LSTM 状态 |
+
+45 维本体观测顺序为角速度3维、重力投影3维、腿关节相对位置12维、关节速度16维、
+上一动作8维和速度指令3维。导出图只读取 `obs[:, :45]` 和 `obs[:, 96:]`，
+中间51维保持零，无需地形扫描或 privileged 状态估计。
+
+X 选择 mode0 `[1, 0]`，Y 选择 student mode1 `[0, 1]`，B 不切换模式。
+启动和重置后均为 mode0；切换时 LSTM 状态持续更新，重置时 `h/c`、动作和扭矩响应缓存清零。
+控制周期为10 ms（仿真步长0.5 ms、decimation 20），保留 upright 的手柄、扭矩响应和可视化。
+
+前6个策略动作依次控制 `FL/FR/RL/RR thigh` 和 `RL/RR calf`，乘以0.5并加默认角度；
+4个hip和2个前calf保持默认角度。后2个动作控制后轮，乘以20后应用0.01速度死区，
+前轮速度目标为零。目标计算前动作裁剪到 `[-100, 100]`，观测仍保留原始8维动作。
+物理控制使用完整12维腿位置目标、4维轮速目标及16维执行器扭矩。
+固定腿关节的刚度为300，其余腿关节160，腿部阻尼3，轮速阻尼0.5。
+
+路径可通过 `Zb02wUprightTsConfig(policy_path=..., terrain_xml_path=...)` 覆盖。
+此入口要求上述 student ONNX 接口，文件缺失或接口不匹配会直接报错。
+
 ## PlotJuggler 遥测
 
 轮足配置默认设置 `plotjuggler_enabled=True`，使用单个 `PlotJugglerUDP("127.0.0.1", 5005)` 发送 `actions`、`wheel_vel`、`cmd`、`obs`、`targ_pos`、`targ_vel` 和 `tau`。WH044X 与通用配置默认关闭。
